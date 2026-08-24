@@ -7,6 +7,6 @@
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "@google/genai": "^0.1.0"
+    "@google/genai": "latest"
   }
 }
