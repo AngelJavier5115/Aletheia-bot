@@ -38,6 +38,7 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
+                    "max_tokens": 1000,
                     "messages": [{ "role": "user", "content": promptText }]
                 })
             });
