@@ -1,9 +1,9 @@
 {
   "name": "aletheia-bot",
   "version": "1.0.0",
-  "description": "Bot de Discord con IA",
+  "description": "Bot de Discord",
   "main": "index.js",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "discord.js": "^14.14.0"
   }
