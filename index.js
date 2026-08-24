@@ -10,6 +10,12 @@ const client = new Client({
 
 client.once('clientReady', (c) => {
     console.log(`Aletheia (Gemini) activa como ${c.user.tag}`);
+    // Diagnóstico de clave
+    if (process.env.OPENROUTER_API_KEY) {
+        console.log("Estado de API Key: DETECTADA (Primeros caracteres:", process.env.OPENROUTER_API_KEY.substring(0, 7) + "...)");
+    } else {
+        console.error("Estado de API Key: NO ENCONTRADA EN RENDER");
+    }
 });
 
 client.on('messageCreate', async (message) => {
@@ -39,7 +45,6 @@ client.on('messageCreate', async (message) => {
 
             const data = await response.json();
             
-            // Si OpenRouter devuelve un error, lo imprimimos en consola para verlo claro
             if (data.error) {
                 console.error('Error detallado de OpenRouter:', data.error);
                 return message.reply(`Error de la API: ${data.error.message || 'Desconocido'}`);
