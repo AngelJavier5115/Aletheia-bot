@@ -20,6 +20,7 @@ client.once('clientReady', (c) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
+    // 1. Manejo del comando principal de IA (!aletheia)
     if (message.content.startsWith('!aletheia')) {
         const promptText = message.content.replace('!aletheia', '').trim();
 
@@ -63,6 +64,68 @@ client.on('messageCreate', async (message) => {
         } catch (error) {
             console.error('Error al conectar con OpenRouter:', error);
             await message.reply('Ocurrió un error crítico al procesar tu solicitud.');
+        }
+    }
+
+    // 2. Nuevo manejo para el sistema de Bitácora (!bitacora o !bit)
+    if (message.content.startsWith('!bitacora') || message.content.startsWith('!bit')) {
+        const prefix = message.content.startsWith('!bitacora') ? '!bitacora' : '!bit';
+        const bitacoraText = message.content.replace(prefix, '').trim();
+
+        if (!bitacoraText) {
+            return message.reply('Escribe la nota o el registro que deseas guardar en tu bitácora después del comando.');
+        }
+
+        try {
+            await message.channel.sendTyping();
+
+            // Usamos la IA para darle estructura formal y analítica a tu nota de bitácora
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    "model": "google/gemini-3.7-flash",
+                    "max_tokens": 1000,
+                    "messages": [
+                        { 
+                            "role": "system", 
+                            "content": "Eres Aletheia, un asistente metodológico. El usuario te proporcionará una nota rápida de su bitácora personal. Tu tarea es formatearla de manera limpia, ordenada, resaltando los conceptos clave o puntos de acción bajo una estructura rigurosa." 
+                        },
+                        { 
+                            "role": "user", 
+                            "content": bitacoraText 
+                        }
+                    ]
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                console.error('Error en Bitácora OpenRouter:', data.error);
+                return message.reply(`Error al registrar la bitácora: ${data.error.message || 'Desconocido'}`);
+            }
+
+            const formattedNote = data.choices?.[0]?.message?.content || bitacoraText;
+
+            // Respuesta con diseño formal de registro guardado
+            const replyMessage = `📌 **[BITÁCORA REGISTRADA]**\n> *Autor: ${message.author.username}*\n\n${formattedNote}`;
+
+            if (replyMessage.length > 2000) {
+                const chunks = replyMessage.match(/[\s\S]{1,1900}/g);
+                for (const chunk of chunks) {
+                    await message.reply(chunk);
+                }
+            } else {
+                await message.reply(replyMessage);
+            }
+
+        } catch (error) {
+            console.error('Error al procesar la bitácora:', error);
+            await message.reply('Ocurrió un error al intentar estructurar tu bitácora.');
         }
     }
 });
