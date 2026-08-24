@@ -11,17 +11,8 @@ const client = new Client({
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-client.once('clientReady', async (c) => {
+client.once('clientReady', (c) => {
     console.log(`Aletheia activada como ${c.user.tag}`);
-    
-    // Lista e imprime los modelos disponibles para tu API Key en los logs de Render
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
-        const data = await response.json();
-        console.log("Modelos disponibles en tu API Key:", data.models ? data.models.map(m => m.name) : data);
-    } catch (e) {
-        console.log("No se pudo listar los modelos:", e.message);
-    }
 });
 
 client.on('messageCreate', async (message) => {
@@ -37,8 +28,8 @@ client.on('messageCreate', async (message) => {
         try {
             await message.channel.sendTyping();
             
-            // Usando la versión de modelo v2.0 estándar
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            // Modelo verificado directamente desde tu API Key
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-native-audio-preview-12-2025' });
             
             const result = await model.generateContent(prompt);
             const response = await result.response;
