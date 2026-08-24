@@ -1,13 +1,10 @@
 {
   "name": "aletheia-bot",
   "version": "1.0.0",
-  "description": "Bot de Discord con Google Gemini",
+  "description": "Bot de Discord con IA",
   "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
+  "type": "commonjs",
   "dependencies": {
-    "@google/generative-ai": "latest",
-    "discord.js": "^14.14.1"
+    "discord.js": "^14.14.0"
   }
 }
