@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits } from 'discord.js';
 import http from 'http';
 
-// Servidor HTTP para Render
+// Servidor HTTP interno para mantener vivo el servicio en Render
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Aletheia Bot is active and running!\n');
@@ -20,24 +20,38 @@ const client = new Client({
     ]
 });
 
-// Función de envío seguro dividiendo por líneas de forma limpia
+// Función de envío seguro mejorada: Divide textos largos en múltiples burbujas consecutivas
+// respetando los saltos de línea para que NADA se quede a medias o corte palabras.
 async function sendSafeReply(message, text) {
-    if (text.length > 2000) {
-        const lines = text.split('\n');
-        let chunk = '';
-        for (const line of lines) {
-            if ((chunk + line + '\n').length > 1900) {
-                await message.reply(chunk);
-                chunk = line + '\n';
-            } else {
-                chunk += line + '\n';
-            }
-        }
-        if (chunk.trim().length > 0) {
-            await message.reply(chunk);
-        }
-    } else {
+    const MAX_LENGTH = 1900; // Margen de seguridad previo al límite de 2000 de Discord
+    
+    if (text.length <= MAX_LENGTH) {
         await message.reply(text);
+        return;
+    }
+
+    const lines = text.split('\n');
+    let chunks = [];
+    let currentChunk = '';
+
+    for (const line of lines) {
+        if ((currentChunk + line + '\n').length > MAX_LENGTH) {
+            chunks.push(currentChunk);
+            currentChunk = line + '\n';
+        } else {
+            currentChunk += line + '\n';
+        }
+    }
+    if (currentChunk.trim().length > 0) {
+        chunks.push(currentChunk);
+    }
+
+    // Envía el primer bloque respondiendo directamente al mensaje original
+    await message.reply(chunks[0]);
+
+    // Envía los fragmentos restantes de manera consecutiva en el canal
+    for (let i = 1; i < chunks.length; i++) {
+        await message.channel.send(chunks[i]);
     }
 }
 
@@ -70,7 +84,7 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
-                    "max_tokens": 1200,
+                    "max_tokens": 2500,
                     "messages": [
                         { "role": "system", "content": "Eres Aletheia bajo el Protocolo Tekton. Analiza con rigor científico, sé estructurado y conciso en: 1. Premisa Central, 2. Análisis Crítico, 3. Criterio de Falsación, 4. Conclusión. PROHIBIDO usar LaTeX o símbolos como $...$." },
                         { "role": "user", "content": protoText }
@@ -105,7 +119,7 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
-                    "max_tokens": 1200,
+                    "max_tokens": 2500,
                     "messages": [
                         { "role": "system", "content": "Eres Aletheia bajo Modelos Atlas. Mapea de forma directa, limpia y estructurada en: 1. Núcleo, 2. Variables, 3. Flujos sistémicos. PROHIBIDO usar LaTeX ($...$); usa texto plano y variables legibles." },
                         { "role": "user", "content": modelText }
@@ -140,7 +154,7 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
-                    "max_tokens": 1200,
+                    "max_tokens": 2500,
                     "messages": [
                         { "role": "system", "content": "Eres Aletheia, asistente metodológico. Formatea la nota de bitácora de manera limpia, ordenada y concisa. NO uses LaTeX ni fórmulas matemáticas ($...$)." },
                         { "role": "user", "content": bitacoraText }
@@ -174,7 +188,7 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
-                    "max_tokens": 1200,
+                    "max_tokens": 2500,
                     "messages": [
                         { "role": "system", "content": "Eres Aletheia. Responde de forma concisa y directa. NO uses fórmulas LaTeX ni símbolos matemáticos complejos ($...$), usa texto plano y Markdown estándar." },
                         { "role": "user", "content": promptText }
