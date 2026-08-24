@@ -1,5 +1,4 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const client = new Client({
     intents: [
@@ -9,10 +8,8 @@ const client = new Client({
     ]
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
 client.once('clientReady', (c) => {
-    console.log(`Aletheia activada como ${c.user.tag}`);
+    console.log(`Aletheia (Gemini) activa como ${c.user.tag}`);
 });
 
 client.on('messageCreate', async (message) => {
@@ -27,11 +24,22 @@ client.on('messageCreate', async (message) => {
 
         try {
             await message.channel.sendTyping();
-            
-            const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-            const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
+
+            // Llamada directa a Gemini a través del puente OpenRouter
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    "model": "google/gemini-2.0-flash-001", // Tu voz de Gemini
+                    "messages": [{ "role": "user", "content": prompt }]
+                })
+            });
+
+            const data = await response.json();
+            const text = data.choices[0]?.message?.content || "No pude generar una respuesta.";
 
             if (text.length > 2000) {
                 const chunks = text.match(/[\s\S]{1,1900}/g);
@@ -42,7 +50,7 @@ client.on('messageCreate', async (message) => {
                 await message.reply(text);
             }
         } catch (error) {
-            console.error('Error al generar respuesta:', error);
+            console.error('Error al conectar con Gemini:', error);
             await message.reply('Ocurrió un error al procesar tu solicitud.');
         }
     }
