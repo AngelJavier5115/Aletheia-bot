@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 
 const client = new Client({
     intents: [
@@ -9,7 +9,8 @@ const client = new Client({
     ]
 });
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Inicializar el SDK oficial de Gemini
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 client.once('clientReady', (c) => {
     console.log(`Aletheia activada como ${c.user.tag}`);
@@ -28,23 +29,13 @@ client.on('messageCreate', async (message) => {
         try {
             await message.channel.sendTyping();
             
-            // Intentar primero con gemini-1.5-flash
-            let modelName = 'gemini-1.5-flash';
-            let model = genAI.getGenerativeModel({ model: modelName });
-            
-            let text = '';
-            try {
-                const result = await model.generateContent(prompt);
-                const response = await result.response;
-                text = response.text();
-            } catch (err) {
-                // Si da 404, intentar con gemini-1.5-pro
-                console.log(`Fallo con ${modelName}, intentando gemini-1.5-pro...`, err.message);
-                model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
-                const result = await model.generateContent(prompt);
-                const response = await result.response;
-                text = response.text();
-            }
+            // Llamada directa al modelo flash usando la nueva sintaxis
+            const response = await ai.models.generateContent({
+                model: 'gemini-1.5-flash',
+                contents: prompt,
+            });
+
+            const text = response.text;
 
             if (text.length > 2000) {
                 const chunks = text.match(/[\s\S]{1,1900}/g);
