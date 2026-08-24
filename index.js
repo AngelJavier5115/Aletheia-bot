@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits } from 'discord.js';
 import http from 'http';
 
-// 1. Servidor HTTP mínimo para satisfacer a Render y evitar el "Application exited early"
+// Servidor HTTP para Render
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Aletheia Bot is active and running!\n');
@@ -12,7 +12,6 @@ server.listen(PORT, () => {
     console.log(`Servidor HTTP interno escuchando en el puerto ${PORT}`);
 });
 
-// 2. Configuración del Cliente de Discord
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -21,7 +20,7 @@ const client = new Client({
     ]
 });
 
-// Función auxiliar para envío seguro de mensajes largos (divididos por líneas)
+// Función de envío seguro dividiendo por líneas de forma limpia
 async function sendSafeReply(message, text) {
     if (text.length > 2000) {
         const lines = text.split('\n');
@@ -54,7 +53,7 @@ client.once('clientReady', (c) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Comando principal !aletheia
+    // Comando !aletheia
     if (message.content.startsWith('!aletheia')) {
         const promptText = message.content.replace('!aletheia', '').trim();
         if (!promptText) return message.reply('Por favor, ingresa una consulta después del comando.');
@@ -69,8 +68,11 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
-                    "max_tokens": 1000,
-                    "messages": [{ "role": "user", "content": promptText }]
+                    "max_tokens": 800,
+                    "messages": [
+                        { "role": "system", "content": "Eres Aletheia. Responde de forma concisa y directa. NO uses fórmulas LaTeX ni símbolos matemáticos complejos ($...$), usa texto plano y Markdown estándar." },
+                        { "role": "user", "content": promptText }
+                    ]
                 })
             });
 
@@ -84,7 +86,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // Sistema de Bitácora (!bitacora o !bit)
+    // Comando !bitacora / !bit
     if (message.content.startsWith('!bitacora') || message.content.startsWith('!bit')) {
         const prefix = message.content.startsWith('!bitacora') ? '!bitacora' : '!bit';
         const bitacoraText = message.content.replace(prefix, '').trim();
@@ -100,9 +102,9 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
-                    "max_tokens": 1000,
+                    "max_tokens": 800,
                     "messages": [
-                        { "role": "system", "content": "Eres Aletheia, un asistente metodológico. Formatea la nota de bitácora de manera limpia, ordenada y concisa, resaltando los conceptos clave o puntos de acción." },
+                        { "role": "system", "content": "Eres Aletheia, asistente metodológico. Formatea la nota de bitácora de manera limpia, ordenada y concisa. NO uses LaTeX ni fórmulas matemáticas ($...$)." },
                         { "role": "user", "content": bitacoraText }
                     ]
                 })
@@ -119,7 +121,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // Protocolo Tekton (!protocolo o !proto)
+    // Comando !protocolo / !proto
     if (message.content.startsWith('!protocolo') || message.content.startsWith('!proto')) {
         const prefix = message.content.startsWith('!protocolo') ? '!protocolo' : '!proto';
         const protoText = message.content.replace(prefix, '').trim();
@@ -135,9 +137,9 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
-                    "max_tokens": 1000,
+                    "max_tokens": 800,
                     "messages": [
-                        { "role": "system", "content": "Eres Aletheia bajo el Protocolo Tekton. Analiza con rigor científico y sé conciso para no exceder los límites de extensión. Divide en: 1. Premisa Central, 2. Análisis Crítico, 3. Criterio de Falsación, 4. Conclusión." },
+                        { "role": "system", "content": "Eres Aletheia bajo el Protocolo Tekton. Analiza con rigor científico, sé conciso y estructurado en: 1. Premisa Central, 2. Análisis Crítico, 3. Criterio de Falsación, 4. Conclusión. PROHIBIDO usar LaTeX o símbolos como $...$." },
                         { "role": "user", "content": protoText }
                     ]
                 })
@@ -154,7 +156,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // Modelo Atlas (!modelo o !atlas)
+    // Comando !modelo / !atlas
     if (message.content.startsWith('!modelo') || message.content.startsWith('!atlas')) {
         const prefix = message.content.startsWith('!modelo') ? '!modelo' : '!atlas';
         const modelText = message.content.replace(prefix, '').trim();
@@ -170,9 +172,9 @@ client.on('messageCreate', async (message) => {
                 },
                 body: JSON.stringify({
                     "model": "google/gemini-3.7-flash",
-                    "max_tokens": 1000,
+                    "max_tokens": 800,
                     "messages": [
-                        { "role": "system", "content": "Eres Aletheia bajo Modelos Atlas. Mapea de forma directa y estructurada en: 1. Núcleo (Core), 2. Variables (con subsecciones de entradas, estado y salidas usando notación analítica), 3. Flujos sistémicos." },
+                        { "role": "system", "content": "Eres Aletheia bajo Modelos Atlas. Mapea de forma directa, limpia y estructurada en: 1. Núcleo, 2. Variables, 3. Flujos. PROHIBIDO usar LaTeX ($...$); usa texto plano y variables legibles." },
                         { "role": "user", "content": modelText }
                     ]
                 })
@@ -190,7 +192,6 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// 3. Inicio de sesión con manejo de errores de conexión
 client.login(process.env.DISCORD_TOKEN).catch(err => {
     console.error("Error crítico al iniciar sesión en Discord:", err);
 });
