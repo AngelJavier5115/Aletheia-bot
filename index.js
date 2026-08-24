@@ -53,7 +53,7 @@ client.once('clientReady', (c) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Comando !aletheia
+    // 1. Comando general !aletheia
     if (message.content.startsWith('!aletheia')) {
         const promptText = message.content.replace('!aletheia', '').trim();
         if (!promptText) return message.reply('Por favor, ingresa una consulta después del comando.');
@@ -86,7 +86,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // Comando !bitacora / !bit
+    // 2. Comando Bitácora (!bitacora o !bit)
     if (message.content.startsWith('!bitacora') || message.content.startsWith('!bit')) {
         const prefix = message.content.startsWith('!bitacora') ? '!bitacora' : '!bit';
         const bitacoraText = message.content.replace(prefix, '').trim();
@@ -121,7 +121,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // Comando !protocolo / !proto
+    // 3. Comando Protocolo Tekton (!protocolo o !proto)
     if (message.content.startsWith('!protocolo') || message.content.startsWith('!proto')) {
         const prefix = message.content.startsWith('!protocolo') ? '!protocolo' : '!proto';
         const protoText = message.content.replace(prefix, '').trim();
@@ -156,7 +156,7 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // Comando !modelo / !atlas
+    // 4. Comando Modelo Atlas (!modelo o !atlas)
     if (message.content.startsWith('!modelo') || message.content.startsWith('!atlas')) {
         const prefix = message.content.startsWith('!modelo') ? '!modelo' : '!atlas';
         const modelText = message.content.replace(prefix, '').trim();
@@ -174,7 +174,7 @@ client.on('messageCreate', async (message) => {
                     "model": "google/gemini-3.7-flash",
                     "max_tokens": 800,
                     "messages": [
-                        { "role": "system", "content": "Eres Aletheia bajo Modelos Atlas. Mapea de forma directa, limpia y estructurada en: 1. Núcleo, 2. Variables, 3. Flujos. PROHIBIDO usar LaTeX ($...$); usa texto plano y variables legibles." },
+                        { "role": "system", "content": "Eres Aletheia bajo Modelos Atlas. Mapea de forma directa, limpia y estructurada en: 1. Núcleo, 2. Variables, 3. Flujos sistémicos. PROHIBIDO usar LaTeX ($...$); usa texto plano y variables legibles." },
                         { "role": "user", "content": modelText }
                     ]
                 })
