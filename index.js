@@ -1,5 +1,5 @@
 // Variable global o de configuración para tu canal de archivo maestro (reemplaza con tu ID real de Discord)
-const ARCHIVO_MAESTRO_ID = 'AQUÍ_PEGAS_EL_ID_DE_TU_CANAL_DE_DISCORD';
+const ARCHIVO_MAESTRO_ID = '1541266346162000012';
 
 // Función auxiliar mejorada para enviar al canal actual y replicar en el Archivo Maestro
 async function enviarConPersistencia(message, titulo, contenidoTexto) {
