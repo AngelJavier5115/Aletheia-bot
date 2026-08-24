@@ -1,16 +1,16 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-  ]
+  ],
 });
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const historyByChannel = new Map();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 client.on('ready', () => {
   console.log(`Aletheia activada como ${client.user.tag}`);
@@ -19,38 +19,18 @@ client.on('ready', () => {
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
-  const channelId = message.channel.id;
-  if (!historyByChannel.has(channelId)) {
-    historyByChannel.set(channelId, []);
-  }
-
-  const history = historyByChannel.get(channelId);
-  history.push({ role: 'user', parts: [{ text: message.content }] });
-
-  try {
-    await message.channel.sendTyping();
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: history,
-      config: {
-        systemInstruction: "Eres Aletheia, un par intelectual riguroso y analítico. Responde con claridad, profundidad y pensamiento crítico."
-      }
-    });
-
-    const replyText = response.text;
-    history.push({ role: 'model', parts: [{ text: replyText }] });
-
-    if (replyText.length > 2000) {
-      const chunks = replyText.match(/[\s\S]{1,1900}/g);
-      for (const chunk of chunks) {
-        await message.reply(chunk);
-      }
-    } else {
-      await message.reply(replyText);
+  if (message.content.startsWith('!aletheia ')) {
+    const prompt = message.content.slice(10);
+    try {
+      await message.channel.sendTyping();
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      message.reply(text);
+    } catch (error) {
+      console.error(error);
+      message.reply('Ocurrió un error al procesar tu solicitud.');
     }
-  } catch (error) {
-    console.error('Error con Aletheia:', error);
-    message.reply('Ocurrió un error al procesar el análisis.');
   }
 });
 
