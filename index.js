@@ -10,8 +10,8 @@ const client = new Client({
 });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// Especificar 'models/gemini-1.5-flash' resuelve el problema de ruta 404
-const model = genAI.getGenerativeModel({ model: 'models/gemini-1.5-flash' });
+// Nombre del modelo actualizado
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 client.once('clientReady', (c) => {
     console.log(`Aletheia activada como ${c.user.tag}`);
