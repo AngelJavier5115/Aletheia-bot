@@ -1,5 +1,5 @@
 const { Client, GatewayIntentBits } = require('discord.js');
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const client = new Client({
     intents: [
@@ -9,8 +9,7 @@ const client = new Client({
     ]
 });
 
-// Inicializar el SDK oficial de Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 client.once('clientReady', (c) => {
     console.log(`Aletheia activada como ${c.user.tag}`);
@@ -23,19 +22,18 @@ client.on('messageCreate', async (message) => {
         const prompt = message.content.replace('!aletheia', '').trim();
 
         if (!prompt) {
-            return message.reply('Por favor, ingresa una pregunta o consulta después del comando.');
+            return message.reply('Por favor, ingresa una consulta después del comando.');
         }
 
         try {
             await message.channel.sendTyping();
             
-            // Llamada directa al modelo flash usando la nueva sintaxis
-            const response = await ai.models.generateContent({
-                model: 'gemini-1.5-flash',
-                contents: prompt,
-            });
-
-            const text = response.text;
+            // Probar el alias genérico que no depende de v1beta
+            const model = genAI.getGenerativeModel({ model: 'gemini-flash' });
+            
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const text = response.text();
 
             if (text.length > 2000) {
                 const chunks = text.match(/[\s\S]{1,1900}/g);
@@ -46,7 +44,7 @@ client.on('messageCreate', async (message) => {
                 await message.reply(text);
             }
         } catch (error) {
-            console.error('Error detallado de Gemini:', error);
+            console.error('Error detallado:', error);
             await message.reply('Ocurrió un error al procesar tu solicitud.');
         }
     }
