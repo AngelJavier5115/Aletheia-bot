@@ -25,7 +25,6 @@ client.on('messageCreate', async (message) => {
         try {
             await message.channel.sendTyping();
 
-            // Llamada directa a Gemini a través del puente OpenRouter
             const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
                 method: "POST",
                 headers: {
@@ -33,13 +32,20 @@ client.on('messageCreate', async (message) => {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    "model": "google/gemini-2.0-flash-001", // Tu voz de Gemini
+                    "model": "google/gemini-2.0-flash-001",
                     "messages": [{ "role": "user", "content": prompt }]
                 })
             });
 
             const data = await response.json();
-            const text = data.choices[0]?.message?.content || "No pude generar una respuesta.";
+            
+            // Si OpenRouter devuelve un error, lo imprimimos en consola para verlo claro
+            if (data.error) {
+                console.error('Error detallado de OpenRouter:', data.error);
+                return message.reply(`Error de la API: ${data.error.message || 'Desconocido'}`);
+            }
+
+            const text = data.choices?.[0]?.message?.content || "No pude generar una respuesta.";
 
             if (text.length > 2000) {
                 const chunks = text.match(/[\s\S]{1,1900}/g);
@@ -50,8 +56,8 @@ client.on('messageCreate', async (message) => {
                 await message.reply(text);
             }
         } catch (error) {
-            console.error('Error al conectar con Gemini:', error);
-            await message.reply('Ocurrió un error al procesar tu solicitud.');
+            console.error('Error al conectar con OpenRouter:', error);
+            await message.reply('Ocurrió un error crítico al procesar tu solicitud.');
         }
     }
 });
