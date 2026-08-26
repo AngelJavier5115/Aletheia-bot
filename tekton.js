@@ -8,10 +8,8 @@ const client = new Client({
     ]
 });
 
-// Prompt especializado de Tekton
 const SYSTEM_PROMPT = `Eres Tekton, una IA especializada en análisis de protocolos, arquitectura de sistemas y falsación lógica. Tu objetivo es examinar supuestos, validar consistencia estructural y detectar fallas antes de la ejecución. Responde de forma clara, directa y con rigor técnico.`;
 
-// Función para fragmentar mensajes si superan los 2000 caracteres de Discord
 async function sendSafeReply(message, text) {
     const CHUNK_SIZE = 1900;
     if (text.length <= CHUNK_SIZE) {
@@ -63,14 +61,17 @@ client.on('messageCreate', async (message) => {
             if (data.choices && data.choices[0] && data.choices[0].message) {
                 const replyText = data.choices[0].message.content;
                 await sendSafeReply(message, replyText);
+            } else if (data.error) {
+                console.error("Error OpenRouter:", data.error);
+                await message.reply(`⚠️ OpenRouter Error: ${data.error.message || JSON.stringify(data.error)}`);
             } else {
-                console.error("Respuesta de OpenRouter:", data);
-                await message.reply("⚠️ No pude obtener una respuesta válida de la API.");
+                console.error("Respuesta desconocida:", data);
+                await message.reply("⚠️ Respuesta no reconocida de la API.");
             }
 
         } catch (error) {
             console.error("Error en Tekton:", error);
-            await message.reply("❌ Ocurrió un error al procesar tu solicitud.");
+            await message.reply("❌ Ocurrió un error interno en el bot.");
         }
     }
 });
