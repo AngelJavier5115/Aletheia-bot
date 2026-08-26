@@ -1,4 +1,14 @@
+import http from 'http';
 import { Client, GatewayIntentBits } from 'discord.js';
+
+// Mini servidor HTTP para satisfacer el health check de Render y corregir la alerta de puerto
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Tekton Bot está activo');
+}).listen(PORT, () => {
+    console.log(`Servidor HTTP activo en el puerto ${PORT}`);
+});
 
 const client = new Client({
     intents: [
@@ -8,8 +18,10 @@ const client = new Client({
     ]
 });
 
+// Prompt especializado de Tekton
 const SYSTEM_PROMPT = `Eres Tekton, una IA especializada en análisis de protocolos, arquitectura de sistemas y falsación lógica. Tu objetivo es examinar supuestos, validar consistencia estructural y detectar fallas antes de la ejecución. Responde de forma clara, directa y con rigor técnico.`;
 
+// Función para fragmentar mensajes si superan el límite de Discord (2000 caracteres)
 async function sendSafeReply(message, text) {
     const CHUNK_SIZE = 1900;
     if (text.length <= CHUNK_SIZE) {
@@ -62,11 +74,11 @@ client.on('messageCreate', async (message) => {
                 const replyText = data.choices[0].message.content;
                 await sendSafeReply(message, replyText);
             } else if (data.error) {
-                console.error("Error OpenRouter:", data.error);
+                console.error("Error devuelto por OpenRouter:", data.error);
                 await message.reply(`⚠️ OpenRouter Error: ${data.error.message || JSON.stringify(data.error)}`);
             } else {
-                console.error("Respuesta desconocida:", data);
-                await message.reply("⚠️ Respuesta no reconocida de la API.");
+                console.error("Respuesta inesperada de la API:", data);
+                await message.reply("⚠️ La API respondió con una estructura no reconocida.");
             }
 
         } catch (error) {
