@@ -1,6 +1,4 @@
-
-const { Client, GatewayIntentBits } = require('discord.js');
-const fetch = require('node-fetch');
+import { Client, GatewayIntentBits } from 'discord.js';
 
 const client = new Client({
     intents: [
@@ -37,7 +35,6 @@ client.once('ready', () => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Tekton responderá cuando lo mencionen o lean en canales donde tenga acceso
     if (message.mentions.has(client.user)) {
         try {
             await message.channel.sendTyping();
@@ -75,7 +72,6 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Inicia sesión usando la variable configurada en Render
 client.login(process.env.DISCORD_TOKEN_TEKTON || process.env.DISCORD_TOKEN).catch(err => {
     console.error("Error al iniciar sesión en Tekton:", err);
 });
