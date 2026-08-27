@@ -33,8 +33,8 @@ discordClient.on('messageCreate', async (message) => {
             }
 
             const apiKey = process.env.GEMINI_API_KEY;
-            // Usamos v1 y el modelo estándar soportado universalmente
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            // Cambiamos al modelo base soportado universalmente por la API REST
+            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
 
             const response = await fetch(url, {
                 method: 'POST',
