@@ -30,7 +30,7 @@ const commands = [
 ].map(cmd => cmd.toJSON());
 
 process.on('unhandledRejection', error => {
-  console.error('Unhandled Rejection silent catch:', error);
+  console.error('Unhandled Rejection silencioso:', error);
 });
 
 client.once('ready', async () => {
@@ -46,11 +46,18 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
+  // 1. Responder de inmediato a Discord para congelar el timeout de 3 segundos
+  try {
+    await interaction.deferReply();
+  } catch (e) {
+    console.error('Error al diferir respuesta:', e);
+    return;
+  }
+
   const { commandName } = interaction;
 
   try {
     if (commandName === 'arkhe-aportar') {
-      await interaction.deferReply();
       const contenido = interaction.options.getString('contenido');
       const tipo = interaction.options.getString('tipo') || 'aporte';
       const refId = interaction.options.getInteger('ref_id');
@@ -64,11 +71,10 @@ client.on('interactionCreate', async interaction => {
         return await interaction.editReply(`Error en BD: ${error.message}`);
       }
 
-      await interaction.editReply(` Aporte registrado en **investigaciones** con ID **#${data[0].id}** [Tipo: \`${tipo}\`]`);
+      await interaction.editReply(`Aporte registrado en **investigaciones** con ID **#${data[0].id}** [Tipo: \`${tipo}\`]`);
     }
 
     else if (commandName === 'arkhe-feedback') {
-      await interaction.deferReply();
       const motivo = interaction.options.getString('motivo');
 
       const { data, error } = await supabase.from('investigaciones').insert([{
@@ -82,12 +88,10 @@ client.on('interactionCreate', async interaction => {
         return await interaction.editReply(`Error en BD: ${error.message}`);
       }
 
-      await interaction.editReply(` **Corrección de Rumbo registrada con ID #${data[0].id}**.`);
+      await interaction.editReply(`**Corrección de Rumbo registrada con ID #${data[0].id}**.`);
     }
 
     else if (commandName === 'aletheia-sintesis') {
-      await interaction.deferReply();
-
       const { data: historial, error } = await supabase
         .from('investigaciones')
         .select('*')
@@ -113,16 +117,8 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply(respuestaTexto.slice(0, 2000));
     }
   } catch (err) {
-    console.error(`Error en /${commandName}:`, err);
-    try {
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply('Ocurrió un error al procesar el comando.');
-      } else {
-        await interaction.reply({ content: 'Error interno en el nodo.', ephemeral: true });
-      }
-    } catch (e) {
-      console.error('Error respondiendo al cliente:', e);
-    }
+    console.error(`Error procesando /${commandName}:`, err);
+    await interaction.editReply('Ocurrió un error interno al procesar el comando.');
   }
 });
 
