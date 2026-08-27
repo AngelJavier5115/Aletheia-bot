@@ -2,14 +2,12 @@ import http from 'http';
 import { Client, GatewayIntentBits } from 'discord.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 1. Servidor HTTP básico para Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
-// 2. Cliente de Discord
 const discordClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -18,9 +16,10 @@ const discordClient = new Client({
     ]
 });
 
-// 3. Inicialización oficial con la SDK de Google
+// Inicialización respetando a Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+// Forzamos la variante con sufijo -latest que el SDK maneja de forma interna sin el 404
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
 
 discordClient.once('ready', () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
