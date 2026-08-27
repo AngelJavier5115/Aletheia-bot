@@ -72,14 +72,14 @@ client.on('interactionCreate', async interaction => {
 
             const prompt = `Analiza las siguientes tareas pendientes y dame un resumen ejecutivo estructurado para priorizar el trabajo:\n${JSON.stringify(tareas, null, 2)}`;
 
-            // Usando gemini-3.6-flash actualizado
+            // Modelo Gemini 3.6 Flash
             const response = await ai.models.generateContent({
                 model: 'gemini-3.6-flash',
                 contents: prompt,
             });
 
-            // Extracción robusta de texto
-            const textoResumen = response.text ? response.text() : 'No se pudo generar contenido.';
+            // OPCIÓN A: Extracción directa de la propiedad .text (sin paréntesis)
+            const textoResumen = response.text || 'No se pudo generar contenido.';
             await interaction.editReply(`🧠 **Resumen de Gemini:**\n${textoResumen}`);
 
         } catch (err) {
@@ -90,16 +90,17 @@ client.on('interactionCreate', async interaction => {
     } else if (commandName === 'aletheia-exportar') {
         await interaction.deferReply();
 
-        const { data: tareas, error } = await supabase.from('tareas').select('*');
+        const { data: tareas, error: errorTareas } = await supabase.from('tareas').select('*');
+        const { data: ideas, error: errorIdeas } = await supabase.from('ideas').select('*');
         
-        if (error) {
-            console.error('Error al exportar:', error);
+        if (errorTareas || errorIdeas) {
+            console.error('Error al exportar:', errorTareas || errorIdeas);
             return interaction.editReply('❌ Error al consultar la base de datos.');
         }
 
         const payload = {
             tareas: tareas || [],
-            ideas: []
+            ideas: ideas || []
         };
 
         await interaction.editReply(`📦 **Estado Actual del Sistema (Supabase Cloud):**\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``);
