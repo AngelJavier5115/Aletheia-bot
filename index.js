@@ -18,12 +18,9 @@ const discordClient = new Client({
     ]
 });
 
-// 3. Inicialización de Gemini (Aletheia)
+// 3. Inicialización limpia de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ 
-    model: 'gemini-1.5-flash',
-    systemInstruction: `Eres Aletheia, la IA orientadora y estratega del sistema. Tu función principal es brindar síntesis clara, visión general y análisis estratégico. Respuestas concisas, ejecutivas, directas y sin rodeos.`
-});
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 discordClient.once('ready', () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
@@ -43,13 +40,16 @@ discordClient.on('messageCreate', async (message) => {
                 return;
             }
 
-            const result = await model.generateContent(cleanContent);
+            // Prompt con directriz de sistema integrada de forma segura
+            const prompt = `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. Pregunta del usuario: ${cleanContent}`;
+
+            const result = await model.generateContent(prompt);
             const responseText = result.response.text();
             
             await message.reply(responseText.substring(0, 1900));
 
         } catch (error) {
-            console.error("DETALLE DEL ERROR EN GEMINI:", error);
+            console.error("DETALLE DEL ERROR:", error);
             await message.reply(`❌ Error: ${error.message || 'Falla interna en el módulo'}`);
         }
     }
