@@ -1,14 +1,14 @@
 import http from 'http';
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
 
-// 1. Servidor HTTP para mantener activo el servicio en Render
+// 1. Servidor HTTP básico para Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
-// 2. Definición de Identidad y Memoria Estratégica
+// 2. Definición del Prompt de Sistema (Memoria e Identidad)
 const ALETHEIA_SYSTEM_PROMPT = `
 Eres Aletheia, la agente operativa y estratega del equipo. 
 Tus directivas principales son:
@@ -18,7 +18,7 @@ Tus directivas principales son:
 4. Mantienes una actitud profesional, analítica y orientada a resultados.
 `;
 
-// 3. Definición de Comandos Slash (Slash Commands)
+// 3. Comandos Slash
 const commands = [
     new SlashCommandBuilder()
         .setName('idea')
@@ -39,7 +39,7 @@ const commands = [
         .setDescription('Genera un análisis estratégico rápido del estado del proyecto')
 ].map(command => command.toJSON());
 
-// 4. Llamada REST a Gemini API
+// 4. Llamada REST a la API de Gemini
 async function getGeminiResponse(promptContext) {
     const apiKey = process.env.GEMINI_API_KEY;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
@@ -67,7 +67,52 @@ async function getGeminiResponse(promptContext) {
     return data.candidates[0].content.parts[0].text;
 }
 
-// 5. Cliente de Discord e Interacciones
+// 5. Función auxiliar para enviar mensajes largos fragmentados sin cortar texto
+async function sendLongMessage(target, text) {
+    const MAX_LENGTH = 1900;
+    if (text.length <= MAX_LENGTH) {
+        if (target.reply) {
+            await target.reply(text);
+        } else if (target.editReply) {
+            await target.editReply(text);
+        } else {
+            await target.send(text);
+        }
+        return;
+    }
+
+    const chunks = [];
+    let currentText = text;
+
+    while (currentText.length > 0) {
+        if (currentText.length <= MAX_LENGTH) {
+            chunks.push(currentText);
+            break;
+        }
+
+        let cutIndex = currentText.lastIndexOf('\n', MAX_LENGTH);
+        if (cutIndex === -1 || cutIndex < 1000) {
+            cutIndex = MAX_LENGTH;
+        }
+
+        chunks.push(currentText.substring(0, cutIndex));
+        currentText = currentText.substring(cutIndex).trim();
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+        if (i === 0) {
+            if (target.reply) {
+                await target.reply(chunks[i]);
+            } else if (target.editReply) {
+                await target.editReply(chunks[i]);
+            }
+        } else {
+            await target.channel.send(chunks[i]);
+        }
+    }
+}
+
+// 6. Cliente de Discord
 const discordClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -79,7 +124,6 @@ const discordClient = new Client({
 discordClient.once('ready', async () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
     
-    // Registro automático de Comandos Slash al iniciar
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         console.log('Registrando comandos slash...');
@@ -93,7 +137,7 @@ discordClient.once('ready', async () => {
     }
 });
 
-// Manejo de interacciones de Comandos Slash
+// Interacciones con Comandos Slash
 discordClient.on('interactionCreate', async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -101,30 +145,34 @@ discordClient.on('interactionCreate', async (interaction) => {
     await interaction.deferReply();
 
     try {
+        let prompt = '';
+        let title = '';
+
         if (commandName === 'idea') {
             const detalle = options.getString('detalle');
-            const prompt = `[COMANDO /IDEA ACTIVADO]: Registra y analiza la siguiente idea brevemente para la mesa estratégica: "${detalle}"`;
-            const respuesta = await getGeminiResponse(prompt);
-            await interaction.editReply(`💡 **Idea Registrada**\n${respuesta}`);
+            prompt = `[COMANDO /IDEA ACTIVADO]: Registra y analiza la siguiente idea brevemente para la mesa estratégica: "${detalle}"`;
+            title = '💡 **Idea Registrada**\n';
         } 
         else if (commandName === 'tarea') {
             const descripcion = options.getString('descripcion');
-            const prompt = `[COMANDO /TAREA ACTIVADO]: Estructura la siguiente tarea asignada con pasos ejecutivos: "${descripcion}"`;
-            const respuesta = await getGeminiResponse(prompt);
-            await interaction.editReply(`📌 **Tarea Configurada**\n${respuesta}`);
+            prompt = `[COMANDO /TAREA ACTIVADO]: Estructura la siguiente tarea asignada con pasos ejecutivos: "${descripcion}"`;
+            title = '📌 **Tarea Configurada**\n';
         } 
         else if (commandName === 'reporte') {
-            const prompt = `[COMANDO /REPORTE ACTIVADO]: Genera un reporte ejecutivo breve sobre la sincronización operativa de los agentes y próximos pasos.`;
-            const respuesta = await getGeminiResponse(prompt);
-            await interaction.editReply(`📊 **Reporte de Estado**\n${respuesta}`);
+            prompt = `[COMANDO /REPORTE ACTIVADO]: Genera un reporte ejecutivo breve sobre la sincronización operativa de los agentes y próximos pasos.`;
+            title = '📊 **Reporte de Estado**\n';
         }
+
+        const respuesta = await getGeminiResponse(prompt);
+        await sendLongMessage(interaction, `${title}${respuesta}`);
+
     } catch (error) {
         console.error('Error en interacción:', error);
         await interaction.editReply(`❌ Error al procesar comando: ${error.message}`);
     }
 });
 
-// Respuestas a menciones tradicionales
+// Menciones directas en canal
 discordClient.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
@@ -140,7 +188,7 @@ discordClient.on('messageCreate', async (message) => {
 
             const prompt = `[MENSAJE DIRECTO]: ${cleanContent}`;
             const responseText = await getGeminiResponse(prompt);
-            await message.reply(responseText.substring(0, 1900));
+            await sendLongMessage(message, responseText);
 
         } catch (error) {
             console.error("DETALLE DEL ERROR:", error);
