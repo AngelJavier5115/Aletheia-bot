@@ -1,12 +1,22 @@
 import http from 'http';
 import { Client, GatewayIntentBits } from 'discord.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// 1. Servidor HTTP básico para mantener activo el Web Service en Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
+// 2. Inicialización de la SDK de Gemini especificando apiVersion: 'v1beta'
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel(
+    { model: 'gemini-1.5-flash' },
+    { apiVersion: 'v1beta' }
+);
+
+// 3. Inicialización del Cliente de Discord
 const discordClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -32,31 +42,10 @@ discordClient.on('messageCreate', async (message) => {
                 return;
             }
 
-            const apiKey = process.env.GEMINI_API_KEY;
-            // Usamos la API estable v1 con el modelo flash oficial de Gemini
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+            const prompt = `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. ${cleanContent}`;
+            const result = await model.generateContent(prompt);
+            const responseText = result.response.text();
 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. ${cleanContent}`
-                        }]
-                    }]
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error?.message || `Error HTTP: ${response.status}`);
-            }
-
-            const responseText = data.candidates[0].content.parts[0].text;
             await message.reply(responseText.substring(0, 1900));
 
         } catch (error) {
