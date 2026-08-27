@@ -18,9 +18,9 @@ const discordClient = new Client({
     ]
 });
 
-// 3. Inicialización limpia de Gemini
+// 3. Inicialización con gemini-pro para compatibilidad total del SDK
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
 discordClient.once('ready', () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
@@ -40,7 +40,6 @@ discordClient.on('messageCreate', async (message) => {
                 return;
             }
 
-            // Prompt con directriz de sistema integrada de forma segura
             const prompt = `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. Pregunta del usuario: ${cleanContent}`;
 
             const result = await model.generateContent(prompt);
