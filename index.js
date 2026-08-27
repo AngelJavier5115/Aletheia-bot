@@ -16,10 +16,9 @@ const discordClient = new Client({
     ]
 });
 
-// Inicialización respetando a Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// Forzamos la variante con sufijo -latest que el SDK maneja de forma interna sin el 404
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+// Usamos el identificador base que el SDK procesa sin errores de enrutamiento
+const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
 discordClient.once('ready', () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
