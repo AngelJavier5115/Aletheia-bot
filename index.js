@@ -38,6 +38,7 @@ client.once('ready', async () => {
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log('Comandos registrados correctamente.');
   } catch (e) {
     console.error('Error registrando comandos:', e);
   }
@@ -46,7 +47,6 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  // 1. Responder de inmediato a Discord para congelar el timeout de 3 segundos
   try {
     await interaction.deferReply();
   } catch (e) {
@@ -109,7 +109,7 @@ client.on('interactionCreate', async interaction => {
       const prompt = `Eres Aletheia, nodo de falsación del Proyecto Arkhé. Analiza las siguientes investigaciones y genera un resumen sintético claro:\n${JSON.stringify(historial, null, 2)}`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.6-flash',
         contents: prompt
       });
 
