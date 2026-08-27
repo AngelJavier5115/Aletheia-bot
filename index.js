@@ -1,12 +1,15 @@
 import http from 'http';
 import { Client, GatewayIntentBits } from 'discord.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// 1. Servidor HTTP básico para Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
+// 2. Cliente de Discord
 const discordClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -14,6 +17,10 @@ const discordClient = new Client({
         GatewayIntentBits.MessageContent,
     ]
 });
+
+// 3. Inicialización oficial con la SDK de Google
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 discordClient.once('ready', () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
@@ -32,31 +39,11 @@ discordClient.on('messageCreate', async (message) => {
                 return;
             }
 
-            const apiKey = process.env.GEMINI_API_KEY;
-            // Cambiamos al modelo base soportado universalmente por la API REST
-            const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`;
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. ${cleanContent}`
-                        }]
-                    }]
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error?.message || `Error HTTP: ${response.status}`);
-            }
-
-            const responseText = data.candidates[0].content.parts[0].text;
+            const prompt = `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. Pregunta del usuario: ${cleanContent}`;
+            
+            const result = await model.generateContent(prompt);
+            const responseText = result.response.text();
+            
             await message.reply(responseText.substring(0, 1900));
 
         } catch (error) {
