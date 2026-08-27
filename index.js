@@ -1,6 +1,6 @@
 import http from 'http';
 import { Client, GatewayIntentBits } from 'discord.js';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // 1. Servidor de mantenimiento para Render
 const PORT = process.env.PORT || 3000;
@@ -9,7 +9,7 @@ http.createServer((req, res) => {
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
-// 2. Inicialización de cliente Discord
+// 2. Cliente de Discord
 const discordClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -18,13 +18,12 @@ const discordClient = new Client({
     ]
 });
 
-// 3. Inicialización de API Gemini (Aletheia)
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-// System Prompt de Aletheia
-const ALETHEIA_PROMPT = `Eres Aletheia, la IA orientadora y estratega del sistema.
-Tu función principal es brindar síntesis clara, visión general y análisis estratégico.
-Respuestas concisas, ejecutivas, directas y sin rodeos. Evita texto innecesario.`;
+// 3. Inicialización de Gemini (Aletheia)
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const model = genAI.getGenerativeModel({ 
+    model: 'gemini-1.5-flash',
+    systemInstruction: `Eres Aletheia, la IA orientadora y estratega del sistema. Tu función principal es brindar síntesis clara, visión general y análisis estratégico. Respuestas concisas, ejecutivas, directas y sin rodeos.`
+});
 
 discordClient.once('ready', () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
@@ -33,12 +32,10 @@ discordClient.once('ready', () => {
 discordClient.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // Detectar si mencionan al bot en Discord
     if (message.mentions.has(discordClient.user)) {
         try {
             await message.channel.sendTyping();
 
-            // Limpiar la mención del mensaje
             const cleanContent = message.content.replace(/<@!?\d+>/g, '').trim();
 
             if (!cleanContent) {
@@ -46,20 +43,10 @@ discordClient.on('messageCreate', async (message) => {
                 return;
             }
 
-            // Llamada directa a Gemini 2.5 Flash
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: cleanContent,
-                config: {
-                    systemInstruction: ALETHEIA_PROMPT,
-                    temperature: 0.7,
-                }
-            });
-
-            const replyText = response.text || "No pude generar una respuesta.";
+            const result = await model.generateContent(cleanContent);
+            const responseText = result.response.text();
             
-            // Enviar respuesta a Discord
-            await message.reply(replyText.substring(0, 1900));
+            await message.reply(responseText.substring(0, 1900));
 
         } catch (error) {
             console.error("Error en Orquestador (Aletheia):", error);
