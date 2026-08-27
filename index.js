@@ -6,7 +6,6 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// Comandos actualizados para la Fase 2 (Investigaciones & Debates)
 const commands = [
   new SlashCommandBuilder()
     .setName('arkhe-aportar')
@@ -18,26 +17,28 @@ const commands = [
       { name: 'Falsación', value: 'falsacion' },
       { name: 'Aporte General', value: 'aporte' }
     ))
-    .addIntegerOption(opt => opt.setName('ref_id').setDescription('ID de la investigación a la que respondes (opcional)')),
+    .addIntegerOption(opt => opt.setName('ref_id').setDescription('ID al que respondes (opcional)')),
 
   new SlashCommandBuilder()
     .setName('arkhe-feedback')
-    .setDescription('Comando de corrección de rumbo: registra cuando algo no funciona')
-    .addStringOption(opt => opt.setName('motivo').setDescription('Explica qué fallo o qué debe cambiar').setRequired(true)),
+    .setDescription('Comando de corrección de rumbo')
+    .addStringOption(opt => opt.setName('motivo').setDescription('Explica qué debe cambiar').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('aletheia-sintesis')
-    .setDescription('Aletheia analiza el historial de investigaciones y genera una síntesis de la red')
+    .setDescription('Aletheia analiza el historial de investigaciones')
 ].map(cmd => cmd.toJSON());
 
-process.on('unhandledRejection', error => {
-  console.error('Unhandled Rejection caught:', error);
-});
+process.on('unhandledRejection', error => console.error('Unhandled Rejection caught:', error));
 
 client.once('ready', async () => {
   console.log(`Nodo Aletheia activo como ${client.user.tag}`);
-  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-  await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+  try {
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+  } catch (e) {
+    console.error('Error registrando comandos:', e);
+  }
 });
 
 client.on('interactionCreate', async interaction => {
@@ -51,14 +52,15 @@ client.on('interactionCreate', async interaction => {
       const tipo = interaction.options.getString('tipo') || 'aporte';
       const refId = interaction.options.getInteger('ref_id');
 
-      const { data, error } = await supabase.from('investigaciones').insert([{
-        autor: 'organico', // Si usas el comando tú, se registra como orgánico
-        contenido,
-        tipo,
-        ref_id: refId
-      }]).select();
+      const payload = { autor: 'organico', contenido, tipo };
+      if (refId !== null) payload.ref_id = refId;
 
-      if (error) throw error;
+      const { data, error } = await supabase.from('investigaciones').insert([payload]).select();
+
+      if (error) {
+        return await interaction.reply({ content: `Error en BD: ${error.message}`, ephemeral: true });
+      }
+
       await interaction.reply(` Aporte registrado en **investigaciones** con ID **#${data[0].id}** [Tipo: \`${tipo}\`]`);
     }
 
@@ -72,8 +74,11 @@ client.on('interactionCreate', async interaction => {
         metadata: { severidad: 'alta', requiere_revision: true }
       }]).select();
 
-      if (error) throw error;
-      await interaction.reply(` **Corrección de Rumbo (Feedback Orgánico) registrada con ID #${data[0].id}**. La red dará prioridad a este aviso.`);
+      if (error) {
+        return await interaction.reply({ content: `Error en BD: ${error.message}`, ephemeral: true });
+      }
+
+      await interaction.reply(` **Corrección de Rumbo registrada con ID #${data[0].id}**.`);
     }
 
     else if (commandName === 'aletheia-sintesis') {
@@ -87,7 +92,7 @@ client.on('interactionCreate', async interaction => {
 
       if (error) throw error;
 
-      const prompt = `Eres Aletheia, nodo de falsación y síntesis del Proyecto Arkhé. Analiza las últimas entradas de la tabla de investigaciones y entrega un resumen de convergencias, divergencias y estado de la red:\n${JSON.stringify(historial, null, 2)}`;
+      const prompt = `Eres Aletheia, nodo de falsación del Proyecto Arkhé. Analiza las investigaciones:\n${JSON.stringify(historial, null, 2)}`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.6-flash',
@@ -98,10 +103,8 @@ client.on('interactionCreate', async interaction => {
     }
   } catch (err) {
     console.error(`Error en /${commandName}:`, err);
-    if (interaction.deferred) {
-      await interaction.editReply('Error al comunicarse con la base de investigaciones.');
-    } else {
-      await interaction.reply({ content: 'Error interno en el nodo.', ephemeral: true });
+    if (!interaction.replied) {
+      await interaction.reply({ content: 'Error procesando la solicitud en el nodo.', ephemeral: true });
     }
   }
 });
