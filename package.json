@@ -1,10 +1,14 @@
 {
-  "name": "aletheia-bot",
+  "name": "bot-orquestador",
   "version": "1.0.0",
-  "description": "Bot de Discord",
+  "description": "Orquestador central para la red de agentes (Aletheia, Atlas, Tekton)",
   "main": "index.js",
   "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
-    "discord.js": "^14.14.0"
+    "@google/genai": "^0.1.1",
+    "discord.js": "^14.14.1"
   }
 }
