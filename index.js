@@ -9,10 +9,10 @@ http.createServer((req, res) => {
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
-// 2. Inicialización de la SDK de Gemini especificando apiVersion: 'v1beta'
+// 2. Inicialización de la SDK de Gemini apuntando al alias 'gemini-1.5-flash-latest' en v1beta
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel(
-    { model: 'gemini-1.5-flash' },
+    { model: 'gemini-1.5-flash-latest' },
     { apiVersion: 'v1beta' }
 );
 
