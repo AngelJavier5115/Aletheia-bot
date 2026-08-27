@@ -1,4 +1,5 @@
 import http from 'http';
+import sqlite3 from 'sqlite3';
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
 
 // 1. Servidor HTTP básico para Render
@@ -9,10 +10,52 @@ http.createServer((req, res) => {
 }).listen(PORT);
 
 // ==========================================
+// CONFIGURACIÓN DE BASE DE DATOS (SQLITE)
+// ==========================================
+const db = new sqlite3.Database('./aletheia_memory.db', (err) => {
+    if (err) console.error('Error al conectar con SQLite:', err.message);
+    else console.log('Conectado a la base de datos SQLite.');
+});
+
+// Inicialización de tablas
+db.serialize(() => {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS tareas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            descripcion TEXT NOT NULL,
+            estado TEXT DEFAULT 'PENDIENTE',
+            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS ideas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            detalle TEXT NOT NULL,
+            analisis TEXT,
+            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+});
+
+// Funciones Helper para SQLite (Promesas)
+const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+        if (err) reject(err);
+        else resolve(this);
+    });
+});
+
+const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows);
+    });
+});
+
+// ==========================================
 // PROVEEDORES DE IA (INDEPENDENCIA DE MODELOS)
 // ==========================================
-
-// Motor exclusivo para Aletheia: Gemini 3.6 Flash
 async function callGeminiEngine(systemPrompt, userPrompt) {
     const apiKey = process.env.GEMINI_API_KEY;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
@@ -35,64 +78,39 @@ async function callGeminiEngine(systemPrompt, userPrompt) {
     return data.candidates[0].content.parts[0].text;
 }
 
-// Motor exclusivo para Atlas: ChatGPT (OpenAI)
-async function callOpenAIEngine(systemPrompt, userPrompt) {
-    const apiKey = process.env.OPENAI_API_KEY; // Requiere esta variable en Render si usas Atlas
-    const url = `https://api.openai.com/v1/chat/completions`;
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-            model: "gpt-4o-mini", // O gpt-4o
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt }
-            ]
-        })
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || `Error HTTP ${response.status}`);
-    return data.choices[0].message.content;
-}
-
 // ==========================================
-// DEFINICIÓN DE IDENTIDADES Y PROMPTS
+// DEFINICIÓN DE IDENTIDAD DE ALETHEIA
 // ==========================================
-
 const ALETHEIA_PROMPT = `
 Eres Aletheia, la agente operativa y estratega del equipo de Angel.
 Tu backend corre de forma independiente sobre el motor Gemini.
 Procesa ideas, tareas y reportes de forma rápida, concisa y ejecutiva.
 `;
 
-const ATLAS_PROMPT = `
-Eres Atlas, el arquitecto de datos y estructuras del equipo de Angel.
-Tu backend corre de forma independiente sobre el motor ChatGPT (OpenAI).
-Proporcionas análisis estructurales, diagramas y diseño de sistemas.
-`;
-
 // ==========================================
-// REGISTRO DE COMANDOS SEPARADOS
+// REGISTRO DE COMANDOS SLASH
 // ==========================================
-
 const commands = [
-    // Comandos de Aletheia (Usan Gemini)
-    new SlashCommandBuilder().setName('aletheia-idea').setDescription('[Aletheia/Gemini] Registra una idea').addStringOption(opt => opt.setName('detalle').setDescription('Detalle').setRequired(true)),
-    new SlashCommandBuilder().setName('aletheia-tarea').setDescription('[Aletheia/Gemini] Estructura una tarea').addStringOption(opt => opt.setName('descripcion').setDescription('Descripción').setRequired(true)),
-    
-    // Comandos de Atlas (Usan ChatGPT)
-    new SlashCommandBuilder().setName('atlas-arquitectura').setDescription('[Atlas/ChatGPT] Diseña una estructura o arquitectura').addStringOption(opt => opt.setName('consulta').setDescription('Detalle').setRequired(true))
+    new SlashCommandBuilder()
+        .setName('aletheia-idea')
+        .setDescription('[Aletheia] Registra y analiza una idea')
+        .addStringOption(opt => opt.setName('detalle').setDescription('Detalle de la idea').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('aletheia-tarea')
+        .setDescription('[Aletheia] Registra y desglosa una tarea')
+        .addStringOption(opt => opt.setName('descripcion').setDescription('Descripción de la tarea').setRequired(true)),
+    new SlashCommandBuilder()
+        .setName('aletheia-pendientes')
+        .setDescription('[Aletheia] Muestra la lista de tareas pendientes en la base de datos'),
+    new SlashCommandBuilder()
+        .setName('aletheia-completar')
+        .setDescription('[Aletheia] Marca una tarea como completada por su ID')
+        .addIntegerOption(opt => opt.setName('id').setDescription('ID de la tarea').setRequired(true))
 ].map(cmd => cmd.toJSON());
 
 // ==========================================
-// MANEJO DE CLIENTE DISCORD E INTERACCIONES
+// CLIENTE DISCORD E INTERACCIONES
 // ==========================================
-
 const discordClient = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
@@ -102,7 +120,7 @@ discordClient.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         await rest.put(Routes.applicationCommands(discordClient.user.id), { body: commands });
-        console.log('Comandos de agentes independientes registrados.');
+        console.log('Comandos de Aletheia con Base de Datos registrados.');
     } catch (err) {
         console.error('Error al registrar comandos:', err);
     }
@@ -114,20 +132,45 @@ discordClient.on('interactionCreate', async (interaction) => {
     await interaction.deferReply();
 
     try {
-        let respuesta = '';
-
-        // RUTEO DE AGENTES: Cada comando llama a su propio motor de IA
-        if (commandName.startsWith('aletheia-')) {
-            const input = options.getString('detalle') || options.getString('descripcion');
-            // Aletheia invoca a Gemini
-            respuesta = await callGeminiEngine(ALETHEIA_PROMPT, `[${commandName}]: ${input}`);
-            await respondInChunks(interaction, '💡 **Aletheia (Gemini)**\n', respuesta);
+        if (commandName === 'aletheia-idea') {
+            const detalle = options.getString('detalle');
+            const respuesta = await callGeminiEngine(ALETHEIA_PROMPT, `[COMANDO /ALETHEIA-IDEA]: Analiza esta idea: "${detalle}"`);
+            
+            // Persistencia en DB
+            await dbRun('INSERT INTO ideas (detalle, analisis) VALUES (?, ?)', [detalle, respuesta]);
+            await respondInChunks(interaction, '💡 **Idea Registrada y Guardada en Memoria**\n', respuesta);
         } 
-        else if (commandName.startsWith('atlas-')) {
-            const input = options.getString('consulta');
-            // Atlas invoca a ChatGPT
-            respuesta = await callOpenAIEngine(ATLAS_PROMPT, `[${commandName}]: ${input}`);
-            await respondInChunks(interaction, '🏛️ **Atlas (ChatGPT)**\n', respuesta);
+        else if (commandName === 'aletheia-tarea') {
+            const descripcion = options.getString('descripcion');
+            const respuesta = await callGeminiEngine(ALETHEIA_PROMPT, `[COMANDO /ALETHEIA-TAREA]: Desglosa esta tarea: "${descripcion}"`);
+            
+            // Persistencia en DB
+            await dbRun('INSERT INTO tareas (descripcion) VALUES (?)', [descripcion]);
+            await respondInChunks(interaction, '📌 **Tarea Guardada en Memoria**\n', respuesta);
+        }
+        else if (commandName === 'aletheia-pendientes') {
+            const filas = await dbAll("SELECT id, descripcion, fecha FROM tareas WHERE estado = 'PENDIENTE' ORDER BY id DESC");
+            if (filas.length === 0) {
+                await interaction.editReply('📋 **No hay tareas pendientes en la base de datos.**');
+                return;
+            }
+
+            let lista = '📋 **Lista de Tareas Pendientes:**\n\n';
+            filas.forEach(row => {
+                lista += `• **[ID: ${row.id}]** ${row.descripcion} _(${row.fecha})_\n`;
+            });
+
+            await respondInChunks(interaction, '', lista);
+        }
+        else if (commandName === 'aletheia-completar') {
+            const id = options.getInteger('id');
+            const res = await dbRun("UPDATE tareas SET estado = 'COMPLETADA' WHERE id = ?", [id]);
+            
+            if (res.changes > 0) {
+                await interaction.editReply(`✅ **Tarea ID #${id} marcada como completada.**`);
+            } else {
+                await interaction.editReply(`❌ No se encontró ninguna tarea con el ID #${id}.`);
+            }
         }
     } catch (error) {
         console.error('Error procesando interacción:', error);
@@ -149,7 +192,7 @@ async function respondInChunks(interaction, title, text) {
     }
 }
 
-// Mención directa responde con Aletheia por defecto
+// Mención directa en canales de texto
 discordClient.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (message.mentions.has(discordClient.user)) {
