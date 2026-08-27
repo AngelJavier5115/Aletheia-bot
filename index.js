@@ -1,6 +1,5 @@
 import http from 'http';
 import { Client, GatewayIntentBits } from 'discord.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
@@ -15,10 +14,6 @@ const discordClient = new Client({
         GatewayIntentBits.MessageContent,
     ]
 });
-
-// Inicialización directa pasando la API key de forma explícita
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 discordClient.once('ready', () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
@@ -37,17 +32,30 @@ discordClient.on('messageCreate', async (message) => {
                 return;
             }
 
-            const chat = model.startChat({
-                history: [],
-                generationConfig: {
-                    maxOutputTokens: 1000,
+            const apiKey = process.env.GEMINI_API_KEY;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
                 },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. ${cleanContent}`
+                        }]
+                    }]
+                })
             });
 
-            const prompt = `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. ${cleanContent}`;
-            const result = await chat.sendMessage(prompt);
-            const responseText = await result.response.text();
-            
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || `Error HTTP: ${response.status}`);
+            }
+
+            const responseText = data.candidates[0].content.parts[0].text;
             await message.reply(responseText.substring(0, 1900));
 
         } catch (error) {
