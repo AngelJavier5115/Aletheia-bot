@@ -1,14 +1,14 @@
 {
   "name": "bot-orquestador",
   "version": "1.0.0",
-  "description": "Orquestador central para la red de agentes (Aletheia, Atlas, Tekton)",
+  "description": "Orquestador central para la red de agentes",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@google/genai": "^0.1.1",
+    "@google/generative-ai": "^0.21.0",
     "discord.js": "^14.14.1"
   }
 }
