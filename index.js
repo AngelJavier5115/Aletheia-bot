@@ -1,140 +1,109 @@
-require('dotenv').config();
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
-const { GoogleGenAI } = require('@google/genai');
-const { createClient } = require('@supabase/supabase-js');
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { createClient } from '@supabase/supabase-js';
+import { GoogleGenAI } from '@google/genai';
 
-// 1. Inicializar Clientes
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
-
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
+// Comandos actualizados para la Fase 2 (Investigaciones & Debates)
+const commands = [
+  new SlashCommandBuilder()
+    .setName('arkhe-aportar')
+    .setDescription('Registra una hipótesis, propuesta o crítica en la red')
+    .addStringOption(opt => opt.setName('contenido').setDescription('El texto de tu aporte').setRequired(true))
+    .addStringOption(opt => opt.setName('tipo').setDescription('Tipo de registro').addChoices(
+      { name: 'Propuesta', value: 'propuesta' },
+      { name: 'Crítica / Objeción', value: 'critica' },
+      { name: 'Falsación', value: 'falsacion' },
+      { name: 'Aporte General', value: 'aporte' }
+    ))
+    .addIntegerOption(opt => opt.setName('ref_id').setDescription('ID de la investigación a la que respondes (opcional)')),
+
+  new SlashCommandBuilder()
+    .setName('arkhe-feedback')
+    .setDescription('Comando de corrección de rumbo: registra cuando algo no funciona')
+    .addStringOption(opt => opt.setName('motivo').setDescription('Explica qué fallo o qué debe cambiar').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('aletheia-sintesis')
+    .setDescription('Aletheia analiza el historial de investigaciones y genera una síntesis de la red')
+].map(cmd => cmd.toJSON());
+
+process.on('unhandledRejection', error => {
+  console.error('Unhandled Rejection caught:', error);
+});
+
 client.once('ready', async () => {
-    console.log(`¡Bot conectado como ${client.user.tag}!`);
-
-    const commands = [
-        new SlashCommandBuilder()
-            .setName('aletheia-tarea')
-            .setDescription('Registra una nueva tarea en Supabase')
-            .addStringOption(option => 
-                option.setName('descripcion').setDescription('Descripción de la tarea').setRequired(true)),
-        new SlashCommandBuilder()
-            .setName('aletheia-resumen')
-            .setDescription('Genera un resumen inteligente de tus tareas pendientes usando Gemini'),
-        new SlashCommandBuilder()
-            .setName('aletheia-completar')
-            .setDescription('Marca una tarea como completada por su ID')
-            .addIntegerOption(option => 
-                option.setName('id').setDescription('ID de la tarea a completar').setRequired(true)),
-        new SlashCommandBuilder()
-            .setName('aletheia-exportar')
-            .setDescription('Exporta el estado actual de las tareas')
-    ].map(command => command.toJSON());
-
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    try {
-        await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('Comandos de barra (/) registrados correctamente.');
-    } catch (error) {
-        console.error('Error al registrar comandos:', error);
-    }
+  console.log(`Nodo Aletheia activo como ${client.user.tag}`);
+  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+  await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
 });
 
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand()) return;
 
-    const { commandName } = interaction;
+  const { commandName } = interaction;
 
-    if (commandName === 'aletheia-tarea') {
-        const descripcion = interaction.options.getString('descripcion');
-        
-        const { data, error } = await supabase
-            .from('tareas')
-            .insert([{ descripcion, estado: 'PENDIENTE' }])
-            .select();
+  try {
+    if (commandName === 'arkhe-aportar') {
+      const contenido = interaction.options.getString('contenido');
+      const tipo = interaction.options.getString('tipo') || 'aporte';
+      const refId = interaction.options.getInteger('ref_id');
 
-        if (error) {
-            console.error('Error Supabase:', error);
-            return interaction.reply({ content: '❌ Error al guardar la tarea en la base de datos.', ephemeral: true });
-        }
+      const { data, error } = await supabase.from('investigaciones').insert([{
+        autor: 'organico', // Si usas el comando tú, se registra como orgánico
+        contenido,
+        tipo,
+        ref_id: refId
+      }]).select();
 
-        const tareaId = data && data[0] ? data[0].id : 'N/A';
-        await interaction.reply(`📌 **Tarea registrada (ID #${tareaId}):** ${descripcion}`);
-
-    } else if (commandName === 'aletheia-completar') {
-        const id = interaction.options.getInteger('id');
-
-        const { data, error } = await supabase
-            .from('tareas')
-            .update({ estado: 'COMPLETADA' })
-            .eq('id', id)
-            .select();
-
-        if (error || !data || data.length === 0) {
-            console.error('Error Supabase al completar:', error);
-            return interaction.reply({ content: `❌ No se encontró la tarea con ID #${id} o no se pudo actualizar.`, ephemeral: true });
-        }
-
-        await interaction.reply(`✅ **Tarea ID #${id} marcada como COMPLETADA.**`);
-
-    } else if (commandName === 'aletheia-resumen') {
-        await interaction.deferReply();
-
-        try {
-            const { data: tareas, error } = await supabase
-                .from('tareas')
-                .select('*')
-                .neq('estado', 'COMPLETADA');
-
-            if (error) throw error;
-
-            if (!tareas || tareas.length === 0) {
-                return interaction.editReply('🎉 **No hay tareas pendientes en el sistema.**');
-            }
-
-            const prompt = `Analiza las siguientes tareas pendientes y dame un resumen ejecutivo estructurado para priorizar el trabajo. Sé conciso para no sobrepasar límites de caracteres:\n${JSON.stringify(tareas, null, 2)}`;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-3.6-flash',
-                contents: prompt,
-            });
-
-            let textoResumen = response.text || 'No se pudo generar contenido.';
-            
-            if (textoResumen.length > 1900) {
-                textoResumen = textoResumen.substring(0, 1900) + '\n\n*(Resumen recortado por longitud)*';
-            }
-
-            await interaction.editReply(`🧠 **Resumen de Gemini:**\n${textoResumen}`);
-
-        } catch (err) {
-            console.error('Error Gemini/Supabase:', err);
-            await interaction.editReply(`❌ Error al procesar el resumen: ${err.message}`);
-        }
-
-    } else if (commandName === 'aletheia-exportar') {
-        await interaction.deferReply();
-
-        const { data: tareas, error: errorTareas } = await supabase.from('tareas').select('*');
-        const { data: ideas, error: errorIdeas } = await supabase.from('ideas').select('*');
-        
-        if (errorTareas || errorIdeas) {
-            console.error('Error al exportar:', errorTareas || errorIdeas);
-            return interaction.editReply('❌ Error al consultar la base de datos.');
-        }
-
-        const payload = {
-            tareas: tareas || [],
-            ideas: ideas || []
-        };
-
-        await interaction.editReply(`📦 **Estado Actual del Sistema (Supabase Cloud):**\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``);
+      if (error) throw error;
+      await interaction.reply(` Aporte registrado en **investigaciones** con ID **#${data[0].id}** [Tipo: \`${tipo}\`]`);
     }
-});
 
-// Captura global para prevenir caídas inesperadas del bot en Render
-process.on('unhandledRejection', error => {
-    console.error('Unhandled promise rejection:', error);
+    else if (commandName === 'arkhe-feedback') {
+      const motivo = interaction.options.getString('motivo');
+
+      const { data, error } = await supabase.from('investigaciones').insert([{
+        autor: 'organico',
+        contenido: motivo,
+        tipo: 'feedback_organico',
+        metadata: { severidad: 'alta', requiere_revision: true }
+      }]).select();
+
+      if (error) throw error;
+      await interaction.reply(` **Corrección de Rumbo (Feedback Orgánico) registrada con ID #${data[0].id}**. La red dará prioridad a este aviso.`);
+    }
+
+    else if (commandName === 'aletheia-sintesis') {
+      await interaction.deferReply();
+
+      const { data: historial, error } = await supabase
+        .from('investigaciones')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(15);
+
+      if (error) throw error;
+
+      const prompt = `Eres Aletheia, nodo de falsación y síntesis del Proyecto Arkhé. Analiza las últimas entradas de la tabla de investigaciones y entrega un resumen de convergencias, divergencias y estado de la red:\n${JSON.stringify(historial, null, 2)}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: prompt
+      });
+
+      await interaction.editReply(response.text);
+    }
+  } catch (err) {
+    console.error(`Error en /${commandName}:`, err);
+    if (interaction.deferred) {
+      await interaction.editReply('Error al comunicarse con la base de investigaciones.');
+    } else {
+      await interaction.reply({ content: 'Error interno en el nodo.', ephemeral: true });
+    }
+  }
 });
 
 client.login(process.env.DISCORD_TOKEN);
