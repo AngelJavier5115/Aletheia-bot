@@ -116,10 +116,12 @@ client.on('interactionCreate', async interaction => {
 
   else if (commandName === 'aletheia-resumen') {
     await interaction.deferReply();
+    
+    // Consulta flexible para traer tareas pendientes sin restricciones estrictas de mayúsculas
     const { data: tareas, error } = await supabase
       .from('tareas')
       .select('*')
-      .eq('estado', 'PENDIENTE');
+      .neq('estado', 'COMPLETADA');
 
     if (error) {
       await interaction.editReply(`❌ Error al consultar tareas: ${error.message}`);
