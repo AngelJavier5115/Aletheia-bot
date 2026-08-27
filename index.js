@@ -21,7 +21,7 @@ const discordClient = new Client({
 // 3. Inicialización de Gemini (Aletheia)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 const model = genAI.getGenerativeModel({ 
-    model: 'gemini-1.5-flash',
+    model: 'gemini-1.5-flash-latest',
     systemInstruction: `Eres Aletheia, la IA orientadora y estratega del sistema. Tu función principal es brindar síntesis clara, visión general y análisis estratégico. Respuestas concisas, ejecutivas, directas y sin rodeos.`
 });
 
