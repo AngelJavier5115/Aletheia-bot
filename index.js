@@ -23,6 +23,11 @@ client.once('ready', async () => {
             .setName('aletheia-resumen')
             .setDescription('Genera un resumen inteligente de tus tareas pendientes usando Gemini'),
         new SlashCommandBuilder()
+            .setName('aletheia-completar')
+            .setDescription('Marca una tarea como completada por su ID')
+            .addIntegerOption(option => 
+                option.setName('id').setDescription('ID de la tarea a completar').setRequired(true)),
+        new SlashCommandBuilder()
             .setName('aletheia-exportar')
             .setDescription('Exporta el estado actual de las tareas')
     ].map(command => command.toJSON());
@@ -44,7 +49,6 @@ client.on('interactionCreate', async interaction => {
     if (commandName === 'aletheia-tarea') {
         const descripcion = interaction.options.getString('descripcion');
         
-        // Guardar en Supabase
         const { data, error } = await supabase
             .from('tareas')
             .insert([{ descripcion, estado: 'PENDIENTE' }])
@@ -58,11 +62,26 @@ client.on('interactionCreate', async interaction => {
         const tareaId = data && data[0] ? data[0].id : 'N/A';
         await interaction.reply(`📌 **Tarea registrada (ID #${tareaId}):** ${descripcion}`);
 
+    } else if (commandName === 'aletheia-completar') {
+        const id = interaction.options.getInteger('id');
+
+        const { data, error } = await supabase
+            .from('tareas')
+            .update({ estado: 'COMPLETADA' })
+            .eq('id', id)
+            .select();
+
+        if (error || !data || data.length === 0) {
+            console.error('Error Supabase al completar:', error);
+            return interaction.reply({ content: `❌ No se encontró la tarea con ID #${id} o no se pudo actualizar.`, ephemeral: true });
+        }
+
+        await interaction.reply(`✅ **Tarea ID #${id} marcada como COMPLETADA.**`);
+
     } else if (commandName === 'aletheia-resumen') {
         await interaction.deferReply();
 
         try {
-            // Obtener tareas pendientes de Supabase
             const { data: tareas, error } = await supabase
                 .from('tareas')
                 .select('*')
@@ -70,16 +89,24 @@ client.on('interactionCreate', async interaction => {
 
             if (error) throw error;
 
-            const prompt = `Analiza las siguientes tareas pendientes y dame un resumen ejecutivo estructurado para priorizar el trabajo:\n${JSON.stringify(tareas, null, 2)}`;
+            if (!tareas || tareas.length === 0) {
+                return interaction.editReply('🎉 **No hay tareas pendientes en el sistema.**');
+            }
 
-            // Modelo Gemini 3.6 Flash
+            const prompt = `Analiza las siguientes tareas pendientes y dame un resumen ejecutivo estructurado para priorizar el trabajo. Sé conciso para no sobrepasar límites de caracteres:\n${JSON.stringify(tareas, null, 2)}`;
+
             const response = await ai.models.generateContent({
                 model: 'gemini-3.6-flash',
                 contents: prompt,
             });
 
-            // OPCIÓN A: Extracción directa de la propiedad .text (sin paréntesis)
-            const textoResumen = response.text || 'No se pudo generar contenido.';
+            let textoResumen = response.text || 'No se pudo generar contenido.';
+            
+            // Recorte defensivo para el límite de 2000 caracteres de Discord
+            if (textoResumen.length > 1900) {
+                textoResumen = textoResumen.substring(0, 1900) + '\n\n*(Resumen recortado por longitud)*';
+            }
+
             await interaction.editReply(`🧠 **Resumen de Gemini:**\n${textoResumen}`);
 
         } catch (err) {
