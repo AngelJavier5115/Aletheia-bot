@@ -1,223 +1,195 @@
-import http from 'http';
-import sqlite3 from 'sqlite3';
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
+require('dotenv').config();
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { GoogleGenAI } = require('@google/genai');
+const { createClient } = require('@supabase/supabase-js');
 
-// ==========================================
-// 1. SERVIDOR HTTP Y ENDPOINT API PARA LA NUBE
-// ==========================================
-const PORT = process.env.PORT || 3000;
-http.createServer(async (req, res) => {
-    if (req.url === '/api/estado' && req.method === 'GET') {
-        try {
-            const tareas = await dbAll("SELECT * FROM tareas WHERE estado = 'PENDIENTE'");
-            const ideas = await dbAll("SELECT * FROM ideas ORDER BY id DESC LIMIT 5");
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ tareas, ideas }, null, 2));
-        } catch (err) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: err.message }));
-        }
-    } else {
-        res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('Orquestador de Agentes Activo');
-    }
-}).listen(PORT);
+// Inicializar cliente Supabase
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ==========================================
-// 2. BASE DE DATOS (SQLITE)
-// ==========================================
-const db = new sqlite3.Database('./aletheia_memory.db', (err) => {
-    if (err) console.error('Error al conectar con SQLite:', err.message);
-    else console.log('Conectado a la base de datos SQLite.');
+// Inicializar cliente Gemini
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
-db.serialize(() => {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS tareas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            descripcion TEXT NOT NULL,
-            estado TEXT DEFAULT 'PENDIENTE',
-            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-    db.run(`
-        CREATE TABLE IF NOT EXISTS ideas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            detalle TEXT NOT NULL,
-            analisis TEXT,
-            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-});
-
-const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-        if (err) reject(err);
-        else resolve(this);
-    });
-});
-
-const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-    });
-});
-
-// ==========================================
-// 3. MOTOR DE IA (GEMINI)
-// ==========================================
-async function callGeminiEngine(systemPrompt, userPrompt) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{
-                parts: [
-                    { text: systemPrompt },
-                    { text: userPrompt }
-                ]
-            }]
-        })
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || `Error HTTP ${response.status}`);
-    return data.candidates[0].content.parts[0].text;
+// Función para enviar mensajes largos fragmentados
+async function sendSplitMessages(destination, text, maxLength = 1900) {
+  if (text.length <= maxLength) {
+    await destination.send(text);
+    return;
+  }
+  let index = 0;
+  while (index < text.length) {
+    let chunk = text.substring(index, index + maxLength);
+    await destination.send(chunk);
+    index += maxLength;
+  }
 }
 
-const ALETHEIA_PROMPT = `
-Eres Aletheia, la agente operativa y estratega del equipo de Angel.
-Tu backend corre de forma independiente sobre el motor Gemini.
-Procesa ideas, tareas y reportes de forma rápida, concisa y ejecutiva.
-`;
-
-// ==========================================
-// 4. COMANDOS SLASH
-// ==========================================
+// Definición de Comandos Slash
 const commands = [
-    new SlashCommandBuilder()
-        .setName('aletheia-idea')
-        .setDescription('[Aletheia] Registra y analiza una idea')
-        .addStringOption(opt => opt.setName('detalle').setDescription('Detalle de la idea').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('aletheia-tarea')
-        .setDescription('[Aletheia] Registra y desglosa una tarea')
-        .addStringOption(opt => opt.setName('descripcion').setDescription('Descripción de la tarea').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('aletheia-pendientes')
-        .setDescription('[Aletheia] Muestra las tareas pendientes'),
-    new SlashCommandBuilder()
-        .setName('aletheia-completar')
-        .setDescription('[Aletheia] Marca una tarea como completada por ID')
-        .addIntegerOption(opt => opt.setName('id').setDescription('ID de la tarea').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('aletheia-resumen')
-        .setDescription('[Aletheia] Genera un resumen ejecutivo de las tareas pendientes'),
-    new SlashCommandBuilder()
-        .setName('aletheia-exportar')
-        .setDescription('[Aletheia] Genera un reporte formateado para sincronizar contexto')
-].map(cmd => cmd.toJSON());
+  new SlashCommandBuilder()
+    .setName('aletheia-tarea')
+    .setDescription('Registra una nueva tarea en la base de datos central')
+    .addStringOption(option =>
+      option.setName('descripcion')
+        .setDescription('Detalle de la tarea a registrar')
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName('aletheia-completar')
+    .setDescription('Marca una tarea como completada')
+    .addIntegerOption(option =>
+      option.setName('id')
+        .setDescription('ID de la tarea a completar')
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName('aletheia-resumen')
+    .setDescription('Genera un reporte ejecutivo consolidado del backlog con Gemini'),
+  new SlashCommandBuilder()
+    .setName('aletheia-exportar')
+    .setDescription('Exporta el estado del sistema en JSON para sincronizar contexto')
+].map(command => command.toJSON());
 
-// ==========================================
-// 5. CLIENTE DISCORD
-// ==========================================
-const discordClient = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+client.once('ready', async () => {
+  console.log(`Orquestador en línea. Conectado como ${client.user.tag}`);
+  console.log('Base de datos conectada: Supabase Cloud.');
+
+  try {
+    console.log('Registrando comandos Slash globalmente...');
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+    console.log('Comandos registrados correctamente.');
+  } catch (error) {
+    console.error('Error registrando comandos:', error);
+  }
 });
 
-discordClient.once('ready', async () => {
-    console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    try {
-        await rest.put(Routes.applicationCommands(discordClient.user.id), { body: commands });
-        console.log('Comandos registrados correctamente.');
-    } catch (err) {
-        console.error('Error al registrar comandos:', err);
-    }
-});
+// Manejo de Comandos Slash
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
 
-discordClient.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    const { commandName, options } = interaction;
+  const { commandName } = interaction;
+
+  if (commandName === 'aletheia-tarea') {
+    const desc = interaction.options.getString('descripcion');
     await interaction.deferReply();
+    const { data, error } = await supabase
+      .from('tareas')
+      .insert([{ descripcion: desc, estado: 'PENDIENTE' }])
+      .select();
+
+    if (error) {
+      await interaction.editReply(`❌ Error al guardar tarea: ${error.message}`);
+    } else {
+      await interaction.editReply(`📌 **Tarea registrada (ID #${data[0].id}):** ${desc}`);
+    }
+  }
+
+  else if (commandName === 'aletheia-completar') {
+    const id = interaction.options.getInteger('id');
+    await interaction.deferReply();
+    const { data, error } = await supabase
+      .from('tareas')
+      .update({ estado: 'COMPLETADA' })
+      .eq('id', id)
+      .select();
+
+    if (error || data.length === 0) {
+      await interaction.editReply(`❌ No se encontró la tarea ID #${id} o falló la actualización.`);
+    } else {
+      await interaction.editReply(`✅ Tarea ID #${id} marcada como completada.`);
+    }
+  }
+
+  else if (commandName === 'aletheia-resumen') {
+    await interaction.deferReply();
+    const { data: tareas, error } = await supabase
+      .from('tareas')
+      .select('*')
+      .eq('estado', 'PENDIENTE');
+
+    if (error) {
+      await interaction.editReply(`❌ Error al consultar tareas: ${error.message}`);
+      return;
+    }
+
+    const prompt = `Actúa como Aletheia, la IA Orquestadora Estratégica del Sistema Arkhé.
+Analiza la siguiente lista de tareas pendientes registrada en la base de datos central:
+${JSON.stringify(tareas, null, 2)}
+
+Genera un reporte ejecutivo breve y estructurado en Markdown con:
+1. Estado general del backlog.
+2. Estatus operativo del sistema.
+3. Acción requerida o sugerencia de priorización.
+Mantén un tono profesional, analítico y directo.`;
 
     try {
-        if (commandName === 'aletheia-idea') {
-            const detalle = options.getString('detalle');
-            const respuesta = await callGeminiEngine(ALETHEIA_PROMPT, `Analiza esta idea: "${detalle}"`);
-            await dbRun('INSERT INTO ideas (detalle, analisis) VALUES (?, ?)', [detalle, respuesta]);
-            await respondInChunks(interaction, '💡 **Idea Registrada y Guardada en Memoria**\n', respuesta);
-        } 
-        else if (commandName === 'aletheia-tarea') {
-            const descripcion = options.getString('descripcion');
-            const respuesta = await callGeminiEngine(ALETHEIA_PROMPT, `Desglosa esta tarea: "${descripcion}"`);
-            await dbRun('INSERT INTO tareas (descripcion) VALUES (?)', [descripcion]);
-            await respondInChunks(interaction, '📌 **Tarea Guardada en Memoria**\n', respuesta);
-        }
-        else if (commandName === 'aletheia-pendientes') {
-            const filas = await dbAll("SELECT id, descripcion, fecha FROM tareas WHERE estado = 'PENDIENTE' ORDER BY id DESC");
-            if (filas.length === 0) return await interaction.editReply('📋 **No hay tareas pendientes.**');
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt
+      });
+      const resumenText = response.text;
+      await interaction.editReply(`📊 **Resumen Ejecutivo de Pendientes**\n\n${resumenText}`);
+    } catch (err) {
+      console.error('Error con Gemini API:', err);
+      await interaction.editReply('❌ Error al procesar el resumen con Gemini.');
+    }
+  }
 
-            let lista = '📋 **Lista de Tareas Pendientes:**\n\n';
-            filas.forEach(r => { lista += `• **[ID: ${r.id}]** ${r.descripcion} _(${r.fecha})_\n`; });
-            await respondInChunks(interaction, '', lista);
-        }
-        else if (commandName === 'aletheia-completar') {
-            const id = options.getInteger('id');
-            const res = await dbRun("UPDATE tareas SET estado = 'COMPLETADA' WHERE id = ?", [id]);
-            if (res.changes > 0) await interaction.editReply(`✅ **Tarea ID #${id} completada.**`);
-            else await interaction.editReply(`❌ No se encontró la tarea #${id}.`);
-        }
-        else if (commandName === 'aletheia-resumen') {
-            const tareas = await dbAll("SELECT id, descripcion FROM tareas WHERE estado = 'PENDIENTE'");
-            const prompt = `Genera un resumen ejecutivo corto y priorizado de estas tareas pendientes:\n${JSON.stringify(tareas)}`;
-            const resumen = await callGeminiEngine(ALETHEIA_PROMPT, prompt);
-            await respondInChunks(interaction, '📊 **Resumen Ejecutivo de Pendientes**\n\n', resumen);
-        }
-        else if (commandName === 'aletheia-exportar') {
-            const tareas = await dbAll("SELECT id, descripcion, estado FROM tareas ORDER BY id DESC LIMIT 10");
-            const ideas = await dbAll("SELECT id, detalle FROM ideas ORDER BY id DESC LIMIT 5");
-            
-            let exportData = "```json\n" + JSON.stringify({ tareas, ideas }, null, 2) + "\n```";
-            await respondInChunks(interaction, '📦 **Estado Actual del Sistema (Copia este bloque para sincronizar):**\n', exportData);
-        }
+  else if (commandName === 'aletheia-exportar') {
+    await interaction.deferReply();
+    const { data: tareas } = await supabase.from('tareas').select('*');
+    const { data: ideas } = await supabase.from('ideas').select('*');
+
+    const snapshot = {
+      tareas: tareas || [],
+      ideas: ideas || []
+    };
+
+    const jsonText = JSON.stringify(snapshot, null, 2);
+    await interaction.editReply(`📦 **Estado Actual del Sistema (Supabase Cloud):**\n\`\`\`json\n${jsonText}\n\`\`\``);
+  }
+});
+
+// Respuestas a Menciones Directas
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+
+  if (message.mentions.has(client.user)) {
+    await message.channel.sendTyping();
+
+    const userPrompt = message.content.replace(`<@${client.user.id}>`, '').trim();
+
+    const systemPrompt = `Eres Aletheia, la entidad Orquestadora y Analítica Central del Sistema Arkhé.
+Tus funciones son la síntesis de información, la priorización estratégica y la gestión del contexto.
+Responde de forma concisa, inteligente, clara y directa. Siempre mantén tu personalidad analítica.`;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `${systemPrompt}\n\nUsuario: ${userPrompt}`
+      });
+
+      const replyText = response.text;
+      await sendSplitMessages(message.channel, replyText);
     } catch (error) {
-        console.error('Error procesando interacción:', error);
-        await interaction.editReply(`❌ Error de agente: ${error.message}`);
+      console.error('Error al responder:', error);
+      await message.channel.send('❌ Ocurrió un error al procesar tu solicitud con el motor de Gemini.');
     }
+  }
 });
 
-async function respondInChunks(interaction, title, text) {
-    const fullText = `${title}${text}`;
-    if (fullText.length <= 1900) {
-        await interaction.editReply(fullText);
-        return;
-    }
-    const chunks = fullText.match(/[\s\S]{1,1900}/g) || [];
-    for (let i = 0; i < chunks.length; i++) {
-        if (i === 0) await interaction.editReply(chunks[i]);
-        else await interaction.followUp(chunks[i]);
-    }
-}
-
-discordClient.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-    if (message.mentions.has(discordClient.user)) {
-        try {
-            await message.channel.sendTyping();
-            const cleanContent = message.content.replace(/<@!?\d+>/g, '').trim();
-            if (!cleanContent) return message.reply("¿En qué puedo ayudarte?");
-
-            const responseText = await callGeminiEngine(ALETHEIA_PROMPT, cleanContent);
-            await message.reply(responseText.substring(0, 1900));
-        } catch (error) {
-            await message.reply(`❌ Error: ${error.message}`);
-        }
-    }
-});
-
-discordClient.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);
