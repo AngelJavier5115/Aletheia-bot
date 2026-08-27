@@ -49,8 +49,8 @@ discordClient.on('messageCreate', async (message) => {
             await message.reply(responseText.substring(0, 1900));
 
         } catch (error) {
-            console.error("Error en Orquestador (Aletheia):", error);
-            await message.reply("❌ Ocurrió un error interno al consultar el módulo de Aletheia.");
+            console.error("DETALLE DEL ERROR EN GEMINI:", error);
+            await message.reply(`❌ Error: ${error.message || 'Falla interna en el módulo'}`);
         }
     }
 });
