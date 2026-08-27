@@ -1,17 +1,36 @@
 import http from 'http';
 import { Client, GatewayIntentBits } from 'discord.js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 1. Servidor HTTP básico para mantener activo el Web Service en Render
+// 1. Servidor HTTP básico para Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
-// 2. Inicialización con gemini-pro (estable en la v1 del SDK)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+// 2. Función directa para llamar a Gemini API sin dependencias con conflicto
+async function getGeminiResponse(promptText) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{
+                parts: [{ text: promptText }]
+            }]
+        })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.error?.message || `Error HTTP ${response.status}`);
+    }
+
+    return data.candidates[0].content.parts[0].text;
+}
 
 // 3. Inicialización del Cliente de Discord
 const discordClient = new Client({
@@ -40,8 +59,7 @@ discordClient.on('messageCreate', async (message) => {
             }
 
             const prompt = `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. ${cleanContent}`;
-            const result = await model.generateContent(prompt);
-            const responseText = result.response.text();
+            const responseText = await getGeminiResponse(prompt);
 
             await message.reply(responseText.substring(0, 1900));
 
