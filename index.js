@@ -29,7 +29,9 @@ const commands = [
     .setDescription('Aletheia analiza el historial de investigaciones')
 ].map(cmd => cmd.toJSON());
 
-process.on('unhandledRejection', error => console.error('Unhandled Rejection caught:', error));
+process.on('unhandledRejection', error => {
+  console.error('Unhandled Rejection silent catch:', error);
+});
 
 client.once('ready', async () => {
   console.log(`Nodo Aletheia activo como ${client.user.tag}`);
@@ -48,6 +50,7 @@ client.on('interactionCreate', async interaction => {
 
   try {
     if (commandName === 'arkhe-aportar') {
+      await interaction.deferReply();
       const contenido = interaction.options.getString('contenido');
       const tipo = interaction.options.getString('tipo') || 'aporte';
       const refId = interaction.options.getInteger('ref_id');
@@ -58,13 +61,14 @@ client.on('interactionCreate', async interaction => {
       const { data, error } = await supabase.from('investigaciones').insert([payload]).select();
 
       if (error) {
-        return await interaction.reply({ content: `Error en BD: ${error.message}`, ephemeral: true });
+        return await interaction.editReply(`Error en BD: ${error.message}`);
       }
 
-      await interaction.reply(` Aporte registrado en **investigaciones** con ID **#${data[0].id}** [Tipo: \`${tipo}\`]`);
+      await interaction.editReply(` Aporte registrado en **investigaciones** con ID **#${data[0].id}** [Tipo: \`${tipo}\`]`);
     }
 
     else if (commandName === 'arkhe-feedback') {
+      await interaction.deferReply();
       const motivo = interaction.options.getString('motivo');
 
       const { data, error } = await supabase.from('investigaciones').insert([{
@@ -75,10 +79,10 @@ client.on('interactionCreate', async interaction => {
       }]).select();
 
       if (error) {
-        return await interaction.reply({ content: `Error en BD: ${error.message}`, ephemeral: true });
+        return await interaction.editReply(`Error en BD: ${error.message}`);
       }
 
-      await interaction.reply(` **Corrección de Rumbo registrada con ID #${data[0].id}**.`);
+      await interaction.editReply(` **Corrección de Rumbo registrada con ID #${data[0].id}**.`);
     }
 
     else if (commandName === 'aletheia-sintesis') {
@@ -90,21 +94,34 @@ client.on('interactionCreate', async interaction => {
         .order('created_at', { ascending: false })
         .limit(15);
 
-      if (error) throw error;
+      if (error) {
+        return await interaction.editReply(`Error leyendo base de datos: ${error.message}`);
+      }
 
-      const prompt = `Eres Aletheia, nodo de falsación del Proyecto Arkhé. Analiza las investigaciones:\n${JSON.stringify(historial, null, 2)}`;
+      if (!historial || historial.length === 0) {
+        return await interaction.editReply('No hay investigaciones registradas aún para sintetizar.');
+      }
+
+      const prompt = `Eres Aletheia, nodo de falsación del Proyecto Arkhé. Analiza las siguientes investigaciones y genera un resumen sintético claro:\n${JSON.stringify(historial, null, 2)}`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt
       });
 
-      await interaction.editReply(response.text);
+      const respuestaTexto = response.text || 'Sin respuesta generada.';
+      await interaction.editReply(respuestaTexto.slice(0, 2000));
     }
   } catch (err) {
     console.error(`Error en /${commandName}:`, err);
-    if (!interaction.replied) {
-      await interaction.reply({ content: 'Error procesando la solicitud en el nodo.', ephemeral: true });
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply('Ocurrió un error al procesar el comando.');
+      } else {
+        await interaction.reply({ content: 'Error interno en el nodo.', ephemeral: true });
+      }
+    } catch (e) {
+      console.error('Error respondiendo al cliente:', e);
     }
   }
 });
