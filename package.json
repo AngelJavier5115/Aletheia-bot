@@ -1,15 +1,15 @@
 {
   "name": "aletheia-bot",
   "version": "1.0.0",
-  "description": "Orquestador Aletheia para Discord con Supabase y Gemini",
+  "description": "Orquestador del Sistema Arkhé",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@google/genai": "latest",
-    "@supabase/supabase-js": "^2.45.0",
-    "discord.js": "^14.15.3",
-    "dotenv": "^16.4.5"
+    "@google/genai": "^0.1.1",
+    "@supabase/supabase-js": "^2.0.0",
+    "discord.js": "^14.0.0",
+    "dotenv": "^16.0.0"
   }
 }
