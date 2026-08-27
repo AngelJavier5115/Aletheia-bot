@@ -2,14 +2,12 @@ import http from 'http';
 import { Client, GatewayIntentBits } from 'discord.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// 1. Servidor de mantenimiento para Render
 const PORT = process.env.PORT || 3000;
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
-// 2. Cliente de Discord
 const discordClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -18,9 +16,9 @@ const discordClient = new Client({
     ]
 });
 
-// 3. Inicialización con gemini-pro para compatibilidad total del SDK
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+// Inicialización directa pasando la API key de forma explícita
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 discordClient.once('ready', () => {
     console.log(`Orquestador en línea. Conectado como ${discordClient.user.tag}`);
@@ -32,7 +30,6 @@ discordClient.on('messageCreate', async (message) => {
     if (message.mentions.has(discordClient.user)) {
         try {
             await message.channel.sendTyping();
-
             const cleanContent = message.content.replace(/<@!?\d+>/g, '').trim();
 
             if (!cleanContent) {
@@ -40,10 +37,16 @@ discordClient.on('messageCreate', async (message) => {
                 return;
             }
 
-            const prompt = `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. Pregunta del usuario: ${cleanContent}`;
+            const chat = model.startChat({
+                history: [],
+                generationConfig: {
+                    maxOutputTokens: 1000,
+                },
+            });
 
-            const result = await model.generateContent(prompt);
-            const responseText = result.response.text();
+            const prompt = `[Rol: Eres Aletheia, estratega y orientadora concisa y ejecutiva]. ${cleanContent}`;
+            const result = await chat.sendMessage(prompt);
+            const responseText = await result.response.text();
             
             await message.reply(responseText.substring(0, 1900));
 
