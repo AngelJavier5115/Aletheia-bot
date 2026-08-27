@@ -141,11 +141,12 @@ Mantén un tono profesional, analítico y directo.`;
         model: 'gemini-2.5-flash',
         contents: prompt
       });
-      const resumenText = response.text;
+      
+      const resumenText = typeof response.text === 'function' ? response.text() : response.text;
       await interaction.editReply(`📊 **Resumen Ejecutivo de Pendientes**\n\n${resumenText}`);
     } catch (err) {
       console.error('Error con Gemini API:', err);
-      await interaction.editReply('❌ Error al procesar el resumen con Gemini.');
+      await interaction.editReply(`❌ Error al procesar el resumen con Gemini: ${err.message}`);
     }
   }
 
@@ -183,7 +184,7 @@ Responde de forma concisa, inteligente, clara y directa. Siempre mantén tu pers
         contents: `${systemPrompt}\n\nUsuario: ${userPrompt}`
       });
 
-      const replyText = response.text;
+      const replyText = typeof response.text === 'function' ? response.text() : response.text;
       await sendSplitMessages(message.channel, replyText);
     } catch (error) {
       console.error('Error al responder:', error);
