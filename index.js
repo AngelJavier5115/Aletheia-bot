@@ -9,9 +9,9 @@ http.createServer((req, res) => {
     res.end('Orquestador de Agentes Activo');
 }).listen(PORT);
 
-// 2. Inicialización estándar del modelo (sin forzar apiVersion)
+// 2. Inicialización con gemini-pro (estable en la v1 del SDK)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
 
 // 3. Inicialización del Cliente de Discord
 const discordClient = new Client({
