@@ -63,7 +63,10 @@ client.on('interactionCreate', async interaction => {
       const refId = interaction.options.getInteger('ref_id');
 
       const payload = { autor: 'organico', contenido, tipo, estado: 'postulado' };
-      if (refId !== null) payload.ref_id = refId;
+
+      if (refId !== null && refId > 0) {
+        payload.ref_id = refId;
+      }
 
       const { data, error } = await supabase.from('investigaciones').insert([payload]).select();
 
@@ -93,7 +96,6 @@ client.on('interactionCreate', async interaction => {
     }
 
     else if (commandName === 'aletheia-sintesis') {
-      // Traemos registros pendientes o recientes para evaluación
       const { data: historial, error } = await supabase
         .from('investigaciones')
         .select('*')
@@ -150,7 +152,6 @@ ${JSON.stringify(historial, null, 2)}`;
 
       const resultado = JSON.parse(response.text || '{}');
 
-      // Actualizar el estado de cada registro en Supabase
       if (resultado.evaluaciones && resultado.evaluaciones.length > 0) {
         for (const item of resultado.evaluaciones) {
           await supabase
