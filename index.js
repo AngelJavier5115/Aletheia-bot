@@ -12,7 +12,6 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.once('ready', async () => {
     console.log(`¡Bot conectado como ${client.user.tag}!`);
 
-    // Registrar comandos slash automáticamente
     const commands = [
         new SlashCommandBuilder()
             .setName('aletheia-tarea')
@@ -102,7 +101,6 @@ client.on('interactionCreate', async interaction => {
 
             let textoResumen = response.text || 'No se pudo generar contenido.';
             
-            // Recorte defensivo para el límite de 2000 caracteres de Discord
             if (textoResumen.length > 1900) {
                 textoResumen = textoResumen.substring(0, 1900) + '\n\n*(Resumen recortado por longitud)*';
             }
@@ -132,6 +130,11 @@ client.on('interactionCreate', async interaction => {
 
         await interaction.editReply(`📦 **Estado Actual del Sistema (Supabase Cloud):**\n\`\`\`json\n${JSON.stringify(payload, null, 2)}\n\`\`\``);
     }
+});
+
+// Captura global para prevenir caídas inesperadas del bot en Render
+process.on('unhandledRejection', error => {
+    console.error('Unhandled promise rejection:', error);
 });
 
 client.login(process.env.DISCORD_TOKEN);
