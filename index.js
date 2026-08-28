@@ -112,7 +112,8 @@ ${JSON.stringify(historial, null, 2)}`;
         }
       }
 
-      const respuestaTexto = resultado.sintesis_markdown || 'Sin síntesis disponible.';
+      const respuestaTexto = (resultado.sintesis_markdown || 'Sin síntesis disponible.')
+        .replace(/\\n/g, '\n');
       await interaction.editReply(respuestaTexto.slice(0, 2000));
     }
   } catch (err) {
