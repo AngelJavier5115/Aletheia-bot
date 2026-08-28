@@ -16,7 +16,6 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// MANTENEMOS ÚNICAMENTE EL COMANDO NATIVO DE ALETHEIA
 const commands = [
   new SlashCommandBuilder()
     .setName('aletheia-sintesis')
@@ -24,18 +23,17 @@ const commands = [
 ].map(cmd => cmd.toJSON());
 
 process.on('unhandledRejection', error => {
-  console.error('Unhandled Rejection silencioso:', error);
+  console.error('[Aletheia] Unhandled Rejection:', error);
 });
 
 client.once('ready', async () => {
-  console.log(`Nodo Aletheia activo como ${client.user.tag}`);
+  console.log(`[Aletheia] Bot en línea como: ${client.user.tag}`);
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    // Sobrescribe el registro global en Discord eliminando los comandos antiguos
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('Comandos de Aletheia actualizados y limpios.');
+    console.log('[Aletheia] Comando /aletheia-sintesis registrado exitosamente.');
   } catch (e) {
-    console.error('Error registrando comandos:', e);
+    console.error('[Aletheia] Error registrando comando:', e);
   }
 });
 
@@ -45,14 +43,12 @@ client.on('interactionCreate', async interaction => {
   try {
     await interaction.deferReply();
   } catch (e) {
-    console.error('Error al diferir respuesta:', e);
+    console.error('[Aletheia] Error al diferir respuesta:', e);
     return;
   }
 
-  const { commandName } = interaction;
-
-  try {
-    if (commandName === 'aletheia-sintesis') {
+  if (interaction.commandName === 'aletheia-sintesis') {
+    try {
       const { data: historial, error } = await supabase
         .from('investigaciones')
         .select('*')
@@ -125,10 +121,10 @@ ${JSON.stringify(historial, null, 2)}`;
       const respuestaTexto = (resultado.sintesis_markdown || 'Sin síntesis disponible.')
         .replace(/\\n/g, '\n');
       await interaction.editReply(respuestaTexto.slice(0, 2000));
+    } catch (err) {
+      console.error('[Aletheia] Error procesando comando:', err);
+      await interaction.editReply('Ocurrió un error interno al procesar el comando.');
     }
-  } catch (err) {
-    console.error(`Error procesando /${commandName}:`, err);
-    await interaction.editReply('Ocurrió un error interno al procesar el comando.');
   }
 });
 
