@@ -6,24 +6,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
+// MANTENEMOS ÚNICAMENTE EL COMANDO NATIVO DE ALETHEIA
 const commands = [
-  new SlashCommandBuilder()
-    .setName('arkhe-aportar')
-    .setDescription('Registra una hipótesis, propuesta o crítica en la red')
-    .addStringOption(opt => opt.setName('contenido').setDescription('El texto de tu aporte').setRequired(true))
-    .addStringOption(opt => opt.setName('tipo').setDescription('Tipo de registro').addChoices(
-      { name: 'Propuesta', value: 'propuesta' },
-      { name: 'Crítica / Objeción', value: 'critica' },
-      { name: 'Falsación', value: 'falsacion' },
-      { name: 'Aporte General', value: 'aporte' }
-    ))
-    .addIntegerOption(opt => opt.setName('ref_id').setDescription('ID al que respondes (opcional)')),
-
-  new SlashCommandBuilder()
-    .setName('arkhe-feedback')
-    .setDescription('Comando de corrección de rumbo')
-    .addStringOption(opt => opt.setName('motivo').setDescription('Explica qué debe cambiar').setRequired(true)),
-
   new SlashCommandBuilder()
     .setName('aletheia-sintesis')
     .setDescription('Aletheia evalúa el historial y actualiza el estado epistémico de las investigaciones')
@@ -37,8 +21,9 @@ client.once('ready', async () => {
   console.log(`Nodo Aletheia activo como ${client.user.tag}`);
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    // Sobrescribe el registro global en Discord eliminando los comandos antiguos
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('Comandos registrados correctamente.');
+    console.log('Comandos de Aletheia actualizados y limpios.');
   } catch (e) {
     console.error('Error registrando comandos:', e);
   }
@@ -57,45 +42,7 @@ client.on('interactionCreate', async interaction => {
   const { commandName } = interaction;
 
   try {
-    if (commandName === 'arkhe-aportar') {
-      const contenido = interaction.options.getString('contenido');
-      const tipo = interaction.options.getString('tipo') || 'aporte';
-      const refId = interaction.options.getInteger('ref_id');
-
-      const payload = { autor: 'organico', contenido, tipo, estado: 'postulado' };
-
-      if (refId !== null && refId > 0) {
-        payload.ref_id = refId;
-      }
-
-      const { data, error } = await supabase.from('investigaciones').insert([payload]).select();
-
-      if (error) {
-        return await interaction.editReply(`Error en BD: ${error.message}`);
-      }
-
-      await interaction.editReply(`Aporte registrado en **investigaciones** con ID **#${data[0].id}** [Tipo: \`${tipo}\` | Estado: \`postulado\`]`);
-    }
-
-    else if (commandName === 'arkhe-feedback') {
-      const motivo = interaction.options.getString('motivo');
-
-      const { data, error } = await supabase.from('investigaciones').insert([{
-        autor: 'organico',
-        contenido: motivo,
-        tipo: 'feedback_organico',
-        estado: 'postulado',
-        metadata: { severidad: 'alta', requiere_revision: true }
-      }]).select();
-
-      if (error) {
-        return await interaction.editReply(`Error en BD: ${error.message}`);
-      }
-
-      await interaction.editReply(`**Corrección de Rumbo registrada con ID #${data[0].id}**.`);
-    }
-
-    else if (commandName === 'aletheia-sintesis') {
+    if (commandName === 'aletheia-sintesis') {
       const { data: historial, error } = await supabase
         .from('investigaciones')
         .select('*')
