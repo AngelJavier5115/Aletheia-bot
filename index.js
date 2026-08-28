@@ -1,6 +1,16 @@
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI, Type } from '@google/genai';
+import http from 'http';
+
+// SERVIDOR HTTP PARA PLAN GRATUITO DE RENDER
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Aletheia Bot is active!\n');
+}).listen(PORT, () => {
+  console.log(`[Aletheia] Servidor HTTP activo en puerto ${PORT}`);
+});
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
