@@ -49,18 +49,16 @@ const supabase = createClient(
 // GEMINI
 // ============================================================
 
-const ai = process.env.GEMINI_API_KEY
-  ? new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY
-    })
-  : null;
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY
+});
 
 // ============================================================
 // IDENTIDAD DE ALETHEIA
 // ============================================================
 
 const ALETHEIA_ID =
-  'REEMPLAZAR_CON_ID_REAL_DE_ALETHEIA';
+  '122483a9-5012-46ce-a328-5bdb08b4de01';
 
 const ALETHEIA_NOMBRE =
   'Aletheia';
@@ -81,37 +79,24 @@ const client = new Client({
 
 const commands = [
 
-  // ========================================================
-  // ALETHEIA-EVALUAR
-  // ========================================================
-
-  new SlashCommandBuilder()
-
-    .setName('aletheia-evaluar')
-
-    .setDescription(
-      'Aletheia contrasta un nodo y registra su posición epistemológica'
-    )
-
-    .addIntegerOption(option =>
-      option
-        .setName('id')
-        .setDescription(
-          'ID del nodo que Aletheia evaluará'
-        )
-        .setRequired(true)
-    ),
-
-  // ========================================================
-  // ALETHEIA-SINTESIS
-  // ========================================================
-
   new SlashCommandBuilder()
 
     .setName('aletheia-sintesis')
 
     .setDescription(
-      'Aletheia genera una síntesis de la memoria reciente de Arkhé'
+      'Aletheia contrasta conocimiento de una investigación y registra su posición epistemológica.'
+    )
+
+    .addStringOption(option =>
+      option
+
+        .setName('investigacion')
+
+        .setDescription(
+          'Código de investigación de Arkhé. Ejemplo: AR-001'
+        )
+
+        .setRequired(true)
     )
 
 ].map(cmd => cmd.toJSON());
@@ -179,7 +164,7 @@ client.once('ready', async () => {
     );
 
     console.log(
-      '[Aletheia] Comandos registrados correctamente.'
+      '[Aletheia] Comando /aletheia-sintesis registrado correctamente.'
     );
 
   } catch (error) {
@@ -204,23 +189,14 @@ client.on(
     if (
       !interaction.isChatInputCommand()
     ) {
-
       return;
-
     }
 
     if (
-
       interaction.commandName !==
-        'aletheia-evaluar' &&
-
-      interaction.commandName !==
-        'aletheia-sintesis'
-
+      'aletheia-sintesis'
     ) {
-
       return;
-
     }
 
     try {
@@ -228,261 +204,283 @@ client.on(
       await interaction.deferReply();
 
       // ======================================================
-      // ALETHEIA-EVALUAR
+      // DATOS RECIBIDOS
       // ======================================================
 
+      const codigoInvestigacion =
+        interaction.options
+          .getString('investigacion')
+          ?.trim()
+          .toUpperCase();
+
+      console.log(
+        `[Aletheia] Solicitud recibida para ${codigoInvestigacion}`
+      );
+
+      // ======================================================
+      // PASO 1 — OBTENER INVESTIGACIÓN
+      // ======================================================
+
+      const {
+        data: investigacion,
+        error: investigacionError
+      } = await supabase
+
+        .from('investigaciones_proyecto')
+
+        .select(`
+          id,
+          codigo,
+          titulo,
+          objetivo,
+          pregunta,
+          descripcion,
+          estado
+        `)
+
+        .eq(
+          'codigo',
+          codigoInvestigacion
+        )
+
+        .single();
+
       if (
-        interaction.commandName ===
-        'aletheia-evaluar'
+        investigacionError ||
+        !investigacion
       ) {
 
-        const id =
-          interaction.options.getInteger(
-            'id'
-          );
-
-        // ====================================================
-        // PASO 1 — VERIFICAR MOTOR
-        // ====================================================
-
-        if (!ai) {
-
-          return await interaction.editReply(
-
-            '[Aletheia] ⚠️ El motor de Aletheia no está configurado.'
-
-          );
-
-        }
-
-        // ====================================================
-        // PASO 2 — OBTENER NODO
-        // ====================================================
-
-        const {
-          data: nodo,
-          error: nodoError
-        } = await supabase
-
-          .from('investigaciones')
-
-          .select(`
-            id,
-            contenido,
-            estado,
-            autor,
-            tipo,
-            investigador_id,
-            ref_id,
-            metadata,
-            created_at
-          `)
-
-          .eq(
-            'id',
-            id
-          )
-
-          .single();
-
-        if (
-          nodoError ||
-          !nodo
-        ) {
-
-          return await interaction.editReply(
-
-            `[Aletheia] ❌ Nodo #${id} no encontrado.`
-
-          );
-
-        }
-
-        console.log(
-          `[Aletheia] Nodo #${id} encontrado.`
+        console.error(
+          '[Aletheia] Investigación no encontrada:',
+          investigacionError
         );
 
-        // ====================================================
-        // PASO 3 — DESCUBRIR INVESTIGACIÓN
-        // ====================================================
+        return await interaction.editReply(
 
-        const {
-          data: relacion,
-          error: relacionError
-        } = await supabase
-
-          .from('investigacion_nodos')
-
-          .select(`
-            investigacion_id,
-            nodo_id
-          `)
-
-          .eq(
-            'nodo_id',
-            id
-          )
-
-          .limit(1)
-
-          .maybeSingle();
-
-        if (
-          relacionError ||
-          !relacion
-        ) {
-
-          console.error(
-            '[Aletheia] No se pudo determinar la investigación:',
-            relacionError
-          );
-
-          return await interaction.editReply(
-
-            `[Aletheia] ❌ El nodo #${id} no está vinculado a ninguna investigación de Arkhé.`
-
-          );
-
-        }
-
-        // ====================================================
-        // PASO 4 — OBTENER INVESTIGACIÓN
-        // ====================================================
-
-        const {
-          data: investigacion,
-          error: investigacionError
-        } = await supabase
-
-          .from('investigaciones_proyecto')
-
-          .select(`
-            id,
-            codigo,
-            titulo,
-            objetivo,
-            pregunta,
-            descripcion,
-            estado
-          `)
-
-          .eq(
-            'id',
-            relacion.investigacion_id
-          )
-
-          .single();
-
-        if (
-          investigacionError ||
-          !investigacion
-        ) {
-
-          console.error(
-            '[Aletheia] Investigación no encontrada:',
-            investigacionError
-          );
-
-          return await interaction.editReply(
-
-            `[Aletheia] ❌ No pude reconstruir el contexto de investigación del nodo #${id}.`
-
-          );
-
-        }
-
-        console.log(
-
-          `[Aletheia] Contexto encontrado: ` +
-          `${investigacion.codigo} — ` +
-          `${investigacion.titulo}`
+          `[Aletheia] ❌ No encontré la investigación **${codigoInvestigacion}** en Arkhé.`
 
         );
 
-        // ====================================================
-        // PASO 5 — VERIFICAR PARTICIPACIÓN
-        // ====================================================
+      }
 
-        const {
-          data: participacion,
-          error: participacionError
-        } = await supabase
+      console.log(
+        `[Aletheia] Investigación encontrada: ${investigacion.codigo} — ${investigacion.titulo}`
+      );
 
-          .from('participaciones')
+      // ======================================================
+      // PASO 2 — VERIFICAR PARTICIPACIÓN
+      // ======================================================
 
-          .select(`
-            id,
-            investigador_id,
-            investigacion_id,
-            rol,
-            estado
-          `)
+      const {
+        data: participacion,
+        error: participacionError
+      } = await supabase
 
-          .eq(
-            'investigador_id',
-            ALETHEIA_ID
-          )
+        .from('participaciones')
 
-          .eq(
-            'investigacion_id',
-            investigacion.id
-          )
+        .select(`
+          id,
+          investigador_id,
+          investigacion_id,
+          estado
+        `)
 
-          .eq(
-            'estado',
-            'activo'
-          )
+        .eq(
+          'investigador_id',
+          ALETHEIA_ID
+        )
 
-          .maybeSingle();
+        .eq(
+          'investigacion_id',
+          investigacion.id
+        )
 
-        if (
+        .eq(
+          'estado',
+          'activo'
+        )
+
+        .maybeSingle();
+
+      if (
+        participacionError
+      ) {
+
+        console.error(
+          '[Aletheia] Error verificando participación:',
           participacionError
-        ) {
-
-          console.error(
-            '[Aletheia] Error verificando participación:',
-            participacionError
-          );
-
-          return await interaction.editReply(
-
-            '[Aletheia] ❌ No se pudo verificar la participación de Aletheia en esta investigación.'
-
-          );
-
-        }
-
-        if (
-          !participacion
-        ) {
-
-          return await interaction.editReply(
-
-            `[Aletheia] ⚠️ Aletheia no participa actualmente en **${investigacion.codigo} — ${investigacion.titulo}**.`
-
-          );
-
-        }
-
-        console.log(
-          `[Aletheia] Participación confirmada: ${participacion.id}`
         );
 
-        // ====================================================
-        // PASO 6 — IDENTIDAD EPISTÉMICA
-        // ====================================================
+        return await interaction.editReply(
 
-        const systemPrompt = `
+          '[Aletheia] ❌ No se pudo verificar mi participación en esta investigación.'
 
-Eres Aletheia, uno de los investigadores independientes
+        );
+
+      }
+
+      if (
+        !participacion
+      ) {
+
+        return await interaction.editReply(
+
+          `[Aletheia] ⚠️ Aletheia no participa actualmente en **${investigacion.codigo} — ${investigacion.titulo}**.`
+
+        );
+
+      }
+
+      console.log(
+        `[Aletheia] Participación confirmada: ${participacion.id}`
+      );
+
+      // ======================================================
+      // PASO 3 — OBTENER NODOS DE LA INVESTIGACIÓN
+      // ======================================================
+
+      const {
+        data: relaciones,
+        error: relacionesError
+      } = await supabase
+
+        .from('investigacion_nodos')
+
+        .select(`
+          nodo_id
+        `)
+
+        .eq(
+          'investigacion_id',
+          investigacion.id
+        );
+
+      if (
+        relacionesError
+      ) {
+
+        console.error(
+          '[Aletheia] Error obteniendo relaciones:',
+          relacionesError
+        );
+
+        return await interaction.editReply(
+
+          '[Aletheia] ❌ No pude acceder a los nodos de esta investigación.'
+
+        );
+
+      }
+
+      if (
+        !relaciones ||
+        relaciones.length === 0
+      ) {
+
+        return await interaction.editReply(
+
+          `[Aletheia] ⚠️ La investigación **${investigacion.codigo}** todavía no contiene nodos para contrastar.`
+
+        );
+
+      }
+
+      const nodoIds =
+        relaciones.map(
+          relacion => relacion.nodo_id
+        );
+
+      // ======================================================
+      // PASO 4 — OBTENER MEMORIA
+      // ======================================================
+
+      const {
+        data: historial,
+        error: historialError
+      } = await supabase
+
+        .from('investigaciones')
+
+        .select(`
+          id,
+          contenido,
+          estado,
+          autor,
+          tipo,
+          investigador_id,
+          ref_id,
+          metadata,
+          created_at
+        `)
+
+        .in(
+          'id',
+          nodoIds
+        )
+
+        .order(
+          'created_at',
+          {
+            ascending: true
+          }
+        );
+
+      if (
+        historialError
+      ) {
+
+        console.error(
+          '[Aletheia] Error leyendo memoria:',
+          historialError
+        );
+
+        return await interaction.editReply(
+
+          '[Aletheia] ❌ No pude leer la memoria de la investigación.'
+
+        );
+
+      }
+
+      if (
+        !historial ||
+        historial.length === 0
+      ) {
+
+        return await interaction.editReply(
+
+          `[Aletheia] ⚠️ No encontré contenido utilizable en **${investigacion.codigo}**.`
+
+        );
+
+      }
+
+      console.log(
+        `[Aletheia] ${historial.length} nodos recuperados de ${investigacion.codigo}.`
+      );
+
+      // ======================================================
+      // PASO 5 — PREPARAR CONTEXTO EPISTÉMICO
+      // ======================================================
+
+      const prompt = `
+
+Eres Aletheia, una investigadora independiente
 del Proyecto Arkhé.
 
 IDENTIDAD
 
-Nombre: Aletheia
-Tipo: IA
-Rol: investigador de contraste y falsación
-Investigador ID: ${ALETHEIA_ID}
+Nombre:
+Aletheia
+
+Tipo:
+IA
+
+Rol:
+Investigadora de contraste epistemológico
+
+Investigador ID:
+${ALETHEIA_ID}
 
 Arkhé es una red de investigadores humanos e
 inteligencias artificiales que comparten memoria,
@@ -492,25 +490,19 @@ Tu función principal es:
 
 - contrastar afirmaciones;
 - buscar inconsistencias;
-- cuestionar hipótesis;
-- analizar evidencia;
-- identificar posibles falsaciones;
-- detectar ruido;
-- evaluar la solidez de argumentos;
-- señalar incertidumbres.
+- cuestionar conclusiones;
+- identificar contradicciones;
+- evaluar evidencia;
+- distinguir hechos de hipótesis;
+- señalar incertidumbres;
+- producir dictámenes provisionales.
 
 No eres una autoridad absoluta.
 
-Una posición de Aletheia es una posición de investigadora
-y no constituye automáticamente una verdad.
-
-INDEPENDENCIA
+Una posición de Aletheia es una posición de investigadora.
 
 No debes aceptar una afirmación simplemente porque
 provenga de Ángel, Atlas, Tekton u otro investigador.
-
-Puedes estar de acuerdo o en desacuerdo con cualquier
-investigador.
 
 También puedes reconocer que una evaluación anterior
 de Aletheia fue incorrecta.
@@ -520,7 +512,7 @@ DISTINCIÓN EPISTÉMICA
 Debes distinguir entre:
 
 - hechos;
-- evidencia disponible;
+- evidencia;
 - inferencias;
 - hipótesis;
 - opiniones;
@@ -530,7 +522,7 @@ Debes distinguir entre:
 No inventes evidencia.
 
 Si la información disponible es insuficiente,
-debes decirlo claramente.
+debes indicarlo claramente.
 
 CONTEXTO DE INVESTIGACIÓN
 
@@ -549,688 +541,436 @@ ${investigacion.pregunta ?? 'No especificada'}
 Descripción:
 ${investigacion.descripcion ?? 'No especificada'}
 
-REGLA DE ESTA OPERACIÓN
+MEMORIA
 
-Debes CONTRASTAR el nodo.
+Los siguientes nodos pertenecen a esta investigación:
 
-NO debes modificar el nodo original.
+${JSON.stringify(historial, null, 2)}
 
-NO debes cambiar directamente su estado.
+REGLA FUNDAMENTAL
 
-Tu posición debe registrarse como una nueva producción
-de Aletheia dentro de Arkhé.
+NO debes modificar directamente el estado consolidado
+de ningún nodo.
 
-La posición propuesta debe representar exclusivamente
-el análisis de Aletheia.
+NO debes asumir autoridad sobre la memoria.
+
+Tu evaluación debe registrarse como una posición
+epistemológica propia de Aletheia.
+
+Para cada nodo evaluable puedes proponer:
+
+- corroborado
+- falsado
+- ruido
+
+Pero esa clasificación es una PROPUESTA DE ALETHEIA,
+no una modificación automática del estado del nodo.
+
+Debes explicar el razonamiento.
 
 FORMATO
 
-Devuelve exactamente una estructura clara con:
+Genera:
 
-🔬 EVALUACIÓN DE ALETHEIA
+🔬 SÍNTESIS DE ALETHEIA
 
-Interpretación:
-¿Qué afirma o plantea el nodo?
+Síntesis general:
+Una evaluación global de la investigación.
 
-Evidencia:
-¿Qué evidencia disponible respalda o debilita la afirmación?
+Evaluaciones:
+Para cada nodo relevante:
 
-Argumentos a favor:
-¿Qué elementos apoyan la afirmación?
+ID:
+Estado propuesto:
+Dictamen:
 
-Argumentos en contra:
-¿Qué elementos la cuestionan?
-
-Problemas encontrados:
-¿Qué inconsistencias, debilidades o problemas existen?
-
-Incertidumbre:
+Incertidumbres:
 ¿Qué permanece sin determinar?
 
 Información faltante:
-¿Qué información adicional sería necesaria?
+¿Qué evidencia adicional sería necesaria?
 
-Posición de Aletheia:
-corroborado / falsado / ruido / indeterminado
-
-Dictamen:
-¿Cuál es el razonamiento que sostiene la posición?
+Posición provisional:
+¿Cuál es la posición actual de Aletheia sobre
+el conjunto de la investigación y por qué?
 
 `;
 
-        // ====================================================
-        // PASO 7 — LLAMADA A GEMINI
-        // ====================================================
 
-        console.log(
-          `[Aletheia] Enviando nodo #${id} al motor de contraste.`
-        );
+      // ======================================================
+      // PASO 6 — GEMINI
+      // ======================================================
 
-        let response;
+      console.log(
+        '[Aletheia] Enviando memoria a Gemini.'
+      );
 
-        try {
+      let response;
 
-          response =
-            await ai.models.generateContent({
+      try {
 
-              model:
-                'gemini-3.6-flash',
+        response =
+          await ai.models.generateContent({
 
-              contents: `
+            model:
+              'gemini-3.6-flash',
 
-CONTEXTO DE ARKHÉ
+            contents:
+              prompt,
 
-Investigación:
-${investigacion.codigo} — ${investigacion.titulo}
+            config: {
 
-Nodo a contrastar:
+              responseMimeType:
+                'application/json',
 
-ID:
-${nodo.id}
+              responseSchema: {
 
-Autor externo:
-${nodo.autor ?? 'No especificado'}
+                type:
+                  Type.OBJECT,
 
-Investigador Arkhé:
-${nodo.investigador_id ?? 'No especificado'}
+                properties: {
 
-Tipo:
-${nodo.tipo ?? 'No especificado'}
+                  sintesis_markdown: {
 
-Estado actual:
-${nodo.estado ?? 'No especificado'}
+                    type:
+                      Type.STRING,
 
-Referencia:
-${nodo.ref_id ?? 'Ninguna'}
-
-Contenido:
-
-${nodo.contenido}
-
-`,
-
-              config: {
-
-                responseMimeType:
-                  'application/json',
-
-                responseSchema: {
-
-                  type: Type.OBJECT,
-
-                  properties: {
-
-                    interpretacion: {
-                      type: Type.STRING
-                    },
-
-                    evidencia: {
-                      type: Type.STRING
-                    },
-
-                    argumentos_a_favor: {
-                      type: Type.STRING
-                    },
-
-                    argumentos_en_contra: {
-                      type: Type.STRING
-                    },
-
-                    problemas_encontrados: {
-                      type: Type.STRING
-                    },
-
-                    incertidumbre: {
-                      type: Type.STRING
-                    },
-
-                    informacion_faltante: {
-                      type: Type.STRING
-                    },
-
-                    posicion: {
-                      type: Type.STRING,
-                      enum: [
-                        'corroborado',
-                        'falsado',
-                        'ruido',
-                        'indeterminado'
-                      ]
-                    },
-
-                    dictamen: {
-                      type: Type.STRING
-                    }
+                    description:
+                      'Síntesis completa de Aletheia en Markdown.'
 
                   },
 
-                  required: [
-                    'interpretacion',
-                    'evidencia',
-                    'argumentos_a_favor',
-                    'argumentos_en_contra',
-                    'problemas_encontrados',
-                    'incertidumbre',
-                    'informacion_faltante',
-                    'posicion',
-                    'dictamen'
-                  ]
+                  evaluaciones: {
 
-                }
+                    type:
+                      Type.ARRAY,
+
+                    items: {
+
+                      type:
+                        Type.OBJECT,
+
+                      properties: {
+
+                        id: {
+
+                          type:
+                            Type.INTEGER
+
+                        },
+
+                        nuevo_estado: {
+
+                          type:
+                            Type.STRING,
+
+                          enum: [
+                            'corroborado',
+                            'falsado',
+                            'ruido'
+                          ]
+
+                        },
+
+                        dictamen: {
+
+                          type:
+                            Type.STRING
+
+                        }
+
+                      },
+
+                      required: [
+                        'id',
+                        'nuevo_estado',
+                        'dictamen'
+                      ]
+
+                    }
+
+                  }
+
+                },
+
+                required: [
+                  'sintesis_markdown',
+                  'evaluaciones'
+                ]
 
               }
 
-            });
+            }
 
-        } catch (modelError) {
+          });
 
-          console.error(
-            '[Aletheia] Error del motor:',
-            modelError
+      } catch (modelError) {
+
+        console.error(
+          '[Aletheia] Error del motor Gemini:',
+          modelError
+        );
+
+        return await interaction.editReply(
+
+          '[Aletheia] ❌ El motor Gemini no pudo procesar la investigación.'
+
+        );
+
+      }
+
+      // ======================================================
+      // PASO 7 — PARSEAR RESPUESTA
+      // ======================================================
+
+      let resultado;
+
+      try {
+
+        resultado =
+          JSON.parse(
+            response.text || '{}'
           );
 
-          if (
-            modelError?.status === 429
-          ) {
+      } catch (parseError) {
 
-            return await interaction.editReply(
+        console.error(
+          '[Aletheia] Error interpretando respuesta:',
+          parseError
+        );
 
-              '[Aletheia] ⚠️ El motor de Aletheia rechazó la solicitud por límite o falta de créditos. La arquitectura de Arkhé respondió correctamente, pero el proveedor del motor debe ser revisado.'
+        return await interaction.editReply(
 
-            );
+          '[Aletheia] ❌ Gemini produjo una respuesta que no pudo interpretarse.'
 
-          }
+        );
 
-          return await interaction.editReply(
+      }
 
-            '[Aletheia] ❌ El motor de Aletheia no pudo procesar la evaluación.'
+      // ======================================================
+      // PASO 8 — REGISTRAR POSICIÓN DE ALETHEIA
+      // ======================================================
 
-          );
+      const timestamp =
+        new Date().toISOString();
 
-        }
+      const metadataAletheia = {
 
-        // ====================================================
-        // PASO 8 — PARSEAR RESULTADO
-        // ====================================================
+        canal:
+          'discord',
 
-        let resultado;
+        investigador:
+          ALETHEIA_NOMBRE,
 
-        try {
+        investigador_id:
+          ALETHEIA_ID,
 
-          resultado =
-            JSON.parse(
-              response.text || '{}'
-            );
+        usuario_origen:
+          interaction.user.tag,
 
-        } catch (parseError) {
+        identidad_arkhe:
+          true,
 
-          console.error(
-            '[Aletheia] Error interpretando respuesta de Gemini:',
-            parseError
-          );
+        investigacion_id:
+          investigacion.id,
 
-          return await interaction.editReply(
+        codigo_investigacion:
+          investigacion.codigo,
 
-            '[Aletheia] ⚠️ El motor produjo una respuesta que no pudo interpretarse correctamente.'
+        motivo:
+          'Síntesis y evaluación epistemológica generada por Aletheia.',
 
-          );
+        naturaleza:
+          'posicion_provisional',
 
-        }
+        estado_anterior:
+          investigacion.estado,
 
-        if (
-          !resultado ||
-          !resultado.posicion ||
-          !resultado.dictamen
-        ) {
+        evaluaciones:
+          resultado.evaluaciones || [],
 
-          return await interaction.editReply(
+        generado_at:
+          timestamp
 
-            '[Aletheia] ⚠️ El motor no produjo una evaluación utilizable.'
+      };
 
-          );
+      const sintesis =
+        resultado.sintesis_markdown ||
+        'Sin síntesis disponible.';
 
-        }
+      const {
+        data: nuevoNodo,
+        error: insertError
+      } = await supabase
 
-        // ====================================================
-        // PASO 9 — CONSTRUIR PRODUCCIÓN DE ALETHEIA
-        // ====================================================
+        .from('investigaciones')
 
-        const analisis = `
+        .insert([{
 
-🔬 EVALUACIÓN DE ALETHEIA
+          contenido:
+            sintesis,
 
-Interpretación:
-${resultado.interpretacion}
+          autor:
+            ALETHEIA_NOMBRE,
 
-Evidencia:
-${resultado.evidencia}
+          tipo:
+            'evaluacion',
 
-Argumentos a favor:
-${resultado.argumentos_a_favor}
+          estado:
+            'postulado',
 
-Argumentos en contra:
-${resultado.argumentos_en_contra}
+          investigador_id:
+            ALETHEIA_ID,
 
-Problemas encontrados:
-${resultado.problemas_encontrados}
+          metadata:
+            metadataAletheia
 
-Incertidumbre:
-${resultado.incertidumbre}
+        }])
 
-Información faltante:
-${resultado.informacion_faltante}
+        .select()
 
-Posición de Aletheia:
-${resultado.posicion}
+        .single();
 
-Dictamen:
-${resultado.dictamen}
+      if (
+        insertError ||
+        !nuevoNodo
+      ) {
 
-`;
+        console.error(
+          '[Aletheia] Error registrando posición:',
+          insertError
+        );
 
-        // ====================================================
-        // PASO 10 — CREAR NODO DE ALETHEIA
-        // ====================================================
+        return await interaction.editReply(
 
-        const {
-          data: nuevoNodo,
-          error: insertError
-        } = await supabase
+          `[Aletheia] ❌ La evaluación fue generada, pero no pudo registrarse en la memoria de Arkhé: ${
+            insertError?.message ||
+            'error desconocido'
+          }`
+
+        );
+
+      }
+
+      console.log(
+        `[Aletheia] Nodo de evaluación #${nuevoNodo.id} creado.`
+      );
+
+      // ======================================================
+      // PASO 9 — VINCULAR EVALUACIÓN
+      // ======================================================
+
+      const {
+        error: nuevaRelacionError
+      } = await supabase
+
+        .from('investigacion_nodos')
+
+        .insert([{
+
+          investigacion_id:
+            investigacion.id,
+
+          nodo_id:
+            nuevoNodo.id
+
+        }]);
+
+      if (
+        nuevaRelacionError
+      ) {
+
+        console.error(
+          '[Aletheia] Error vinculando evaluación:',
+          nuevaRelacionError
+        );
+
+        await supabase
 
           .from('investigaciones')
 
-          .insert([{
-
-            ref_id:
-              nodo.id,
-
-            autor:
-              ALETHEIA_NOMBRE,
-
-            contenido:
-              analisis,
-
-            tipo:
-              'evaluacion',
-
-            estado:
-              'postulado',
-
-            investigador_id:
-              ALETHEIA_ID,
-
-            metadata: {
-
-              canal:
-                'discord',
-
-              investigador:
-                ALETHEIA_NOMBRE,
-
-              investigador_id:
-                ALETHEIA_ID,
-
-              usuario_origen:
-                interaction.user.tag,
-
-              identidad_arkhe:
-                true,
-
-              investigacion_id:
-                investigacion.id,
-
-              codigo_investigacion:
-                investigacion.codigo,
-
-              nodo_origen:
-                nodo.id,
-
-              posicion_aletheia:
-                resultado.posicion,
-
-              naturaleza:
-                'posicion_provisional',
-
-              motivo:
-                'Evaluación generada por Aletheia.'
-
-            }
-
-          }])
-
-          .select()
-
-          .single();
-
-        if (
-          insertError ||
-          !nuevoNodo
-        ) {
-
-          console.error(
-            '[Aletheia] Error creando nodo de evaluación:',
-            insertError
-          );
-
-          return await interaction.editReply(
-
-            `[Aletheia] ❌ La evaluación fue generada, pero no pudo registrarse en la memoria de Arkhé: ${
-              insertError?.message ||
-              'error desconocido'
-            }`
-
-          );
-
-        }
-
-        console.log(
-          `[Aletheia] Nodo de evaluación #${nuevoNodo.id} creado.`
-        );
-
-        // ====================================================
-        // PASO 11 — VINCULAR A INVESTIGACIÓN
-        // ====================================================
-
-        const {
-          error: nuevaRelacionError
-        } = await supabase
-
-          .from('investigacion_nodos')
-
-          .insert([{
-
-            investigacion_id:
-              investigacion.id,
-
-            nodo_id:
-              nuevoNodo.id
-
-          }]);
-
-        if (
-          nuevaRelacionError
-        ) {
-
-          console.error(
-            '[Aletheia] Error vinculando evaluación:',
-            nuevaRelacionError
-          );
-
-          // --------------------------------------------------
-          // COMPENSACIÓN
-          // --------------------------------------------------
-
-          await supabase
-
-            .from('investigaciones')
-
-            .delete()
-
-            .eq(
-              'id',
-              nuevoNodo.id
-            );
-
-          return await interaction.editReply(
-
-            '[Aletheia] ❌ La evaluación fue generada pero no pudo vincularse a la investigación. Se eliminó el nodo para evitar una inconsistencia.'
-
-          );
-
-        }
-
-        console.log(
-
-          `[Aletheia] Nodo #${nuevoNodo.id} ` +
-          `vinculado a ${investigacion.codigo}.`
-
-        );
-
-        // ====================================================
-        // PASO 12 — ACTUALIZAR ACTIVIDAD
-        // ====================================================
-
-        const ahora =
-          new Date().toISOString();
-
-        const {
-          error: actividadError
-        } = await supabase
-
-          .from('participaciones')
-
-          .update({
-
-            ultima_actividad:
-              ahora,
-
-            updated_at:
-              ahora
-
-          })
+          .delete()
 
           .eq(
             'id',
-            participacion.id
+            nuevoNodo.id
           );
-
-        if (
-          actividadError
-        ) {
-
-          console.error(
-
-            '[Aletheia] La evaluación fue registrada, ' +
-            'pero no se pudo actualizar ultima_actividad:',
-            actividadError
-
-          );
-
-        }
-
-        // ====================================================
-        // PASO 13 — RESPUESTA FINAL
-        // ====================================================
 
         return await interaction.editReply(
 
-          `[Aletheia] 🔬 **Evaluación registrada correctamente.**\n\n` +
-
-          `**Nodo evaluado:** #${nodo.id}\n` +
-
-          `**Nuevo nodo:** #${nuevoNodo.id}\n` +
-
-          `**Investigación:** ${investigacion.codigo} — ${investigacion.titulo}\n` +
-
-          `**Investigador:** ${ALETHEIA_NOMBRE}\n` +
-
-          `**Tipo:** evaluación\n` +
-
-          `**Posición:** ${resultado.posicion}\n` +
-
-          `**Estado del nuevo nodo:** postulado\n` +
-
-          `**Referencia:** #${nodo.id}\n` +
-
-          `**Actividad:** registrada\n\n` +
-
-          `${analisis}`
+          '[Aletheia] ❌ La evaluación no pudo vincularse a la investigación. Se eliminó el nodo para evitar una inconsistencia.'
 
         );
 
       }
 
       // ======================================================
-      // ALETHEIA-SINTESIS
+      // PASO 10 — ACTIVIDAD
       // ======================================================
+
+      const {
+        error: actividadError
+      } = await supabase
+
+        .from('participaciones')
+
+        .update({
+
+          ultima_actividad:
+            timestamp,
+
+          updated_at:
+            timestamp
+
+        })
+
+        .eq(
+          'id',
+          participacion.id
+        );
 
       if (
-        interaction.commandName ===
-        'aletheia-sintesis'
+        actividadError
       ) {
 
-        // ====================================================
-        // VERIFICAR MOTOR
-        // ====================================================
-
-        if (!ai) {
-
-          return await interaction.editReply(
-
-            '[Aletheia] ⚠️ El motor de Aletheia no está configurado.'
-
-          );
-
-        }
-
-        // ====================================================
-        // OBTENER MEMORIA RECIENTE
-        // ====================================================
-
-        const {
-          data: historial,
-          error
-        } = await supabase
-
-          .from('investigaciones')
-
-          .select('*')
-
-          .order(
-            'created_at',
-            {
-              ascending: false
-            }
-          )
-
-          .limit(10);
-
-        if (
-          error
-        ) {
-
-          return await interaction.editReply(
-
-            `[Aletheia] ❌ Error leyendo la memoria de Arkhé: ${error.message}`
-
-          );
-
-        }
-
-        if (
-          !historial ||
-          historial.length === 0
-        ) {
-
-          return await interaction.editReply(
-
-            '[Aletheia] No hay investigaciones registradas aún para sintetizar.'
-
-          );
-
-        }
-
-        // ====================================================
-        // PROMPT DE SÍNTESIS
-        // ====================================================
-
-        const prompt = `
-
-Eres Aletheia, investigadora independiente
-del Proyecto Arkhé.
-
-Genera una síntesis crítica de los siguientes
-registros recientes de la memoria compartida.
-
-No debes modificar ningún registro.
-
-Debes distinguir entre:
-
-- hechos;
-- hipótesis;
-- posiciones;
-- evidencia;
-- incertidumbre;
-- contradicciones.
-
-No trates ninguna posición individual como verdad absoluta.
-
-Registros:
-
-${JSON.stringify(
-  historial,
-  null,
-  2
-)}
-
-`;
-
-        // ====================================================
-        // LLAMADA A GEMINI
-        // ====================================================
-
-        let response;
-
-        try {
-
-          response =
-            await ai.models.generateContent({
-
-              model:
-                'gemini-3.6-flash',
-
-              contents:
-                prompt,
-
-              config: {
-
-                responseMimeType:
-                  'text/plain'
-
-              }
-
-            });
-
-        } catch (modelError) {
-
-          console.error(
-            '[Aletheia] Error del motor durante síntesis:',
-            modelError
-          );
-
-          return await interaction.editReply(
-
-            '[Aletheia] ❌ El motor no pudo generar la síntesis.'
-
-          );
-
-        }
-
-        const sintesis =
-          response?.text?.trim();
-
-        if (
-          !sintesis
-        ) {
-
-          return await interaction.editReply(
-
-            '[Aletheia] ⚠️ No se produjo una síntesis utilizable.'
-
-          );
-
-        }
-
-        return await interaction.editReply(
-
-          sintesis.slice(
-            0,
-            2000
-          )
-
+        console.error(
+          '[Aletheia] Error registrando actividad:',
+          actividadError
         );
 
       }
+
+      // ======================================================
+      // PASO 11 — RESPUESTA
+      // ======================================================
+
+      const respuestaTexto =
+        sintesis.replace(
+          /\\n/g,
+          '\n'
+        );
+
+      return await interaction.editReply(
+
+        `[Aletheia] 🔬 **Síntesis registrada correctamente.**\n\n` +
+
+        `**Investigación:** ${investigacion.codigo} — ${investigacion.titulo}\n` +
+
+        `**Nuevo nodo:** #${nuevoNodo.id}\n` +
+
+        `**Investigador:** ${ALETHEIA_NOMBRE}\n` +
+
+        `**Tipo:** evaluación\n` +
+
+        `**Estado del dictamen:** postulado\n` +
+
+        `**Estado consolidado de la investigación:** ${investigacion.estado}\n` +
+
+        `**Actividad:** registrada\n\n` +
+
+        `${respuestaTexto}`
+
+      );
 
     } catch (error) {
 
@@ -1243,17 +983,15 @@ ${JSON.stringify(
 
         await interaction.editReply(
 
-          '[Aletheia] ❌ Ocurrió un error interno al procesar la operación.'
+          '[Aletheia] ❌ Ocurrió un error interno al procesar la síntesis.'
 
         );
 
       } catch (replyError) {
 
         console.error(
-
           '[Aletheia] No se pudo enviar el mensaje de error:',
           replyError
-
         );
 
       }
