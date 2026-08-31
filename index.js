@@ -97,6 +97,26 @@ const commands = [
         )
 
         .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+
+    .setName('aletheia-consultar')
+
+    .setDescription(
+      'Aletheia consulta un nodo de la memoria compartida de Arkhé.'
+    )
+
+    .addIntegerOption(option =>
+      option
+
+        .setName('id')
+
+        .setDescription(
+          'ID del nodo que Aletheia consultará.'
+        )
+
+        .setRequired(true)
     )
 
 ].map(cmd => cmd.toJSON());
@@ -164,7 +184,7 @@ client.once('ready', async () => {
     );
 
     console.log(
-      '[Aletheia] Comando /aletheia-sintesis registrado correctamente.'
+      '[Aletheia] Comandos registrados correctamente.'
     );
 
   } catch (error) {
@@ -194,7 +214,9 @@ client.on(
 
     if (
       interaction.commandName !==
-      'aletheia-sintesis'
+      'aletheia-sintesis' &&
+      interaction.commandName !==
+      'aletheia-consultar'
     ) {
       return;
     }
@@ -202,6 +224,100 @@ client.on(
     try {
 
       await interaction.deferReply();
+
+      // ======================================================
+      // ALETHEIA-CONSULTAR
+      // ======================================================
+
+      if (
+        interaction.commandName ===
+        'aletheia-consultar'
+      ) {
+
+        const id =
+          interaction.options.getInteger('id');
+
+        console.log(
+          `[Aletheia] Consultando nodo #${id}.`
+        );
+
+        const {
+          data: nodo,
+          error
+        } = await supabase
+
+          .from('investigaciones')
+
+          .select(`
+            id,
+            contenido,
+            estado,
+            autor,
+            tipo,
+            investigador_id,
+            ref_id,
+            metadata,
+            created_at
+          `)
+
+          .eq('id', id)
+
+          .single();
+
+        if (
+          error ||
+          !nodo
+        ) {
+
+          console.error(
+            `[Aletheia] Nodo #${id} no encontrado:`,
+            error
+          );
+
+          return await interaction.editReply(
+
+            `[Aletheia] ❌ Nodo #${id} no encontrado en la memoria de Arkhé.`
+
+          );
+
+        }
+
+        const contenido =
+          nodo.contenido ||
+          'Sin contenido.';
+
+        const contenidoVisible =
+          contenido.length > 1600
+            ? `${contenido.slice(0, 1600)}\n… [contenido truncado]`
+            : contenido;
+
+        return await interaction.editReply(
+
+          `[Aletheia] 🔎 **Consulta de memoria**\n\n` +
+
+          `**Nodo:** #${nodo.id}\n` +
+
+          `**Tipo:** ${nodo.tipo ?? 'No especificado'}\n` +
+
+          `**Estado:** ${nodo.estado ?? 'No especificado'}\n` +
+
+          `**Autor externo:** ${nodo.autor ?? 'No especificado'}\n` +
+
+          `**Investigador Arkhé:** ${nodo.investigador_id ?? 'No especificado'}\n` +
+
+          `**Referencia:** ${nodo.ref_id ?? 'Ninguna'}\n` +
+
+          `**Creado:** ${nodo.created_at ?? 'No especificado'}\n\n` +
+
+          `**Contenido:**\n${contenidoVisible}`
+
+        );
+
+      }
+
+      // ======================================================
+      // ALETHEIA-SÍNTESIS
+      // ======================================================
 
       // ======================================================
       // DATOS RECIBIDOS
