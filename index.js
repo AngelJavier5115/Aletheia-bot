@@ -9,10 +9,11 @@ import {
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI, Type } from '@google/genai';
 import http from 'http';
-
-// ============================================================
-// ALETHEIA — NODO DE CONTRASTE DE ARKHÉ
-// ============================================================
+import {
+  ejecutarAletheiaRonda,
+  crearComandoAletheiaRonda,
+  ALETHEIA_ROUND_COMMAND_NAME
+} from './arkhe-round-command.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -39,13 +40,6 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// ============================================================
-// UTILIDAD DE SALIDA DISCORD
-// Discord limita cada mensaje a 2000 caracteres.
-// Esta función divide por párrafos/líneas/palabras para no
-// cortar innecesariamente la producción epistemológica.
-// ============================================================
-
 const DISCORD_MAX = 2000;
 
 function dividirMensaje(texto, max = DISCORD_MAX) {
@@ -54,27 +48,15 @@ function dividirMensaje(texto, max = DISCORD_MAX) {
 
   while (restante.length > max) {
     let corte = restante.lastIndexOf('\n\n', max);
-
-    if (corte < 1) {
-      corte = restante.lastIndexOf('\n', max);
-    }
-
-    if (corte < 1) {
-      corte = restante.lastIndexOf(' ', max);
-    }
-
-    if (corte < 1) {
-      corte = max;
-    }
+    if (corte < 1) corte = restante.lastIndexOf('\n', max);
+    if (corte < 1) corte = restante.lastIndexOf(' ', max);
+    if (corte < 1) corte = max;
 
     partes.push(restante.slice(0, corte).trimEnd());
     restante = restante.slice(corte).trimStart();
   }
 
-  if (restante.length > 0) {
-    partes.push(restante);
-  }
-
+  if (restante.length > 0) partes.push(restante);
   return partes;
 }
 
@@ -86,36 +68,29 @@ async function enviarRespuestaLarga(interaction, texto) {
   }
 
   await interaction.editReply(partes[0]);
-
   for (let i = 1; i < partes.length; i++) {
     await interaction.followUp(partes[i]);
   }
 }
 
-// ============================================================
-// COMANDOS
-// ============================================================
-
 const commands = [
   new SlashCommandBuilder()
     .setName('aletheia-sintesis')
     .setDescription('Aletheia contrasta conocimiento de una investigación y registra su posición epistemológica.')
-    .addStringOption(option =>
-      option
-        .setName('investigacion')
-        .setDescription('Código de investigación de Arkhé. Ejemplo: AR-001')
-        .setRequired(true)
-    ),
+    .addStringOption(option => option
+      .setName('investigacion')
+      .setDescription('Código de investigación de Arkhé. Ejemplo: AR-001')
+      .setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('aletheia-consultar')
     .setDescription('Aletheia consulta un nodo de la memoria compartida de Arkhé.')
-    .addIntegerOption(option =>
-      option
-        .setName('id')
-        .setDescription('ID del nodo que Aletheia consultará.')
-        .setRequired(true)
-    )
+    .addIntegerOption(option => option
+      .setName('id')
+      .setDescription('ID del nodo que Aletheia consultará.')
+      .setRequired(true)),
+
+  crearComandoAletheiaRonda(SlashCommandBuilder)
 ].map(cmd => cmd.toJSON());
 
 process.on('unhandledRejection', error => {
@@ -132,12 +107,10 @@ client.once('ready', async () => {
 
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
     await rest.put(
       Routes.applicationCommands(client.user.id),
       { body: commands }
     );
-
     console.log('[Aletheia] Comandos registrados correctamente.');
   } catch (error) {
     console.error('[Aletheia] Error registrando comandos:', error);
@@ -149,7 +122,8 @@ client.on('interactionCreate', async interaction => {
 
   if (
     interaction.commandName !== 'aletheia-sintesis' &&
-    interaction.commandName !== 'aletheia-consultar'
+    interaction.commandName !== 'aletheia-consultar' &&
+    interaction.commandName !== ALETHEIA_ROUND_COMMAND_NAME
   ) {
     return;
   }
@@ -157,9 +131,15 @@ client.on('interactionCreate', async interaction => {
   try {
     await interaction.deferReply();
 
-    // ========================================================
-    // ALETHEIA-CONSULTAR
-    // ========================================================
+    if (interaction.commandName === ALETHEIA_ROUND_COMMAND_NAME) {
+      return await ejecutarAletheiaRonda({
+        interaction,
+        supabase,
+        ai,
+        aletheiaId: ALETHEIA_ID,
+        responderLargo: enviarRespuestaLarga
+      });
+    }
 
     if (interaction.commandName === 'aletheia-consultar') {
       const id = interaction.options.getInteger('id');
@@ -207,10 +187,6 @@ client.on('interactionCreate', async interaction => {
       );
     }
 
-    // ========================================================
-    // ALETHEIA-SÍNTESIS
-    // ========================================================
-
     const codigoInvestigacion = interaction.options
       .getString('investigacion')
       ?.trim()
@@ -239,8 +215,6 @@ client.on('interactionCreate', async interaction => {
       );
     }
 
-    console.log(`[Aletheia] Investigación encontrada: ${investigacion.codigo} — ${investigacion.titulo}`);
-
     const { data: participacion, error: participacionError } = await supabase
       .from('participaciones')
       .select(`id, investigador_id, investigacion_id, estado`)
@@ -261,8 +235,6 @@ client.on('interactionCreate', async interaction => {
         `[Aletheia] ⚠️ Aletheia no participa actualmente en **${investigacion.codigo} — ${investigacion.titulo}**.`
       );
     }
-
-    console.log(`[Aletheia] Participación confirmada: ${participacion.id}`);
 
     const { data: relaciones, error: relacionesError } = await supabase
       .from('investigacion_nodos')
@@ -312,8 +284,6 @@ client.on('interactionCreate', async interaction => {
         `[Aletheia] ⚠️ No encontré contenido utilizable en **${investigacion.codigo}**.`
       );
     }
-
-    console.log(`[Aletheia] ${historial.length} nodos recuperados de ${investigacion.codigo}.`);
 
     const prompt = `
 Eres Aletheia, una investigadora independiente del Proyecto Arkhé.
@@ -377,23 +347,18 @@ Información faltante: qué evidencia adicional sería necesaria.
 Posición provisional: cuál es la posición actual de Aletheia sobre el conjunto de la investigación y por qué.
 `;
 
-    console.log('[Aletheia] Enviando memoria a Gemini.');
-
     let response;
 
     try {
       response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              sintesis_markdown: {
-                type: Type.STRING,
-                description: 'Síntesis completa de Aletheia en Markdown.'
-              },
+              sintesis_markdown: { type: Type.STRING },
               evaluaciones: {
                 type: Type.ARRAY,
                 items: {
@@ -422,7 +387,6 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
     }
 
     let resultado;
-
     try {
       resultado = JSON.parse(response.text || '{}');
     } catch (parseError) {
@@ -433,7 +397,6 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
     }
 
     const timestamp = new Date().toISOString();
-
     const metadataAletheia = {
       canal: 'discord',
       investigador: ALETHEIA_NOMBRE,
@@ -471,8 +434,6 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
       );
     }
 
-    console.log(`[Aletheia] Nodo de evaluación #${nuevoNodo.id} creado.`);
-
     const { error: nuevaRelacionError } = await supabase
       .from('investigacion_nodos')
       .insert([{
@@ -482,12 +443,7 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
 
     if (nuevaRelacionError) {
       console.error('[Aletheia] Error vinculando evaluación:', nuevaRelacionError);
-
-      await supabase
-        .from('investigaciones')
-        .delete()
-        .eq('id', nuevoNodo.id);
-
+      await supabase.from('investigaciones').delete().eq('id', nuevoNodo.id);
       return await interaction.editReply(
         '[Aletheia] ❌ La evaluación no pudo vincularse a la investigación. Se eliminó el nodo para evitar una inconsistencia.'
       );
@@ -495,10 +451,7 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
 
     const { error: actividadError } = await supabase
       .from('participaciones')
-      .update({
-        ultima_actividad: timestamp,
-        updated_at: timestamp
-      })
+      .update({ ultima_actividad: timestamp, updated_at: timestamp })
       .eq('id', participacion.id);
 
     if (actividadError) {
@@ -514,22 +467,17 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
       `**Estado del dictamen:** postulado\n` +
       `**Estado consolidado de la investigación:** ${investigacion.estado}\n` +
       `**Actividad:** registrada\n\n` +
-      sintesis.replace(/\\n/g, '\n');
-
-    // ========================================================
-    // SALIDA LARGA: PRIMER MENSAJE + FOLLOW-UPS
-    // ========================================================
+      sintesis;
 
     await enviarRespuestaLarga(interaction, respuestaTexto);
-
   } catch (error) {
     console.error('[Aletheia] Error procesando interacción:', error);
 
     try {
       if (interaction.deferred || interaction.replied) {
-        await interaction.editReply('[Aletheia] ❌ Ocurrió un error interno al procesar la síntesis.');
+        await interaction.editReply('[Aletheia] ❌ Ocurrió un error interno al procesar la solicitud.');
       } else {
-        await interaction.reply('[Aletheia] ❌ Ocurrió un error interno al procesar la síntesis.');
+        await interaction.reply('[Aletheia] ❌ Ocurrió un error interno al procesar la solicitud.');
       }
     } catch (replyError) {
       console.error('[Aletheia] No se pudo enviar el mensaje de error:', replyError);
