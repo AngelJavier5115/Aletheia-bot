@@ -3,6 +3,7 @@
 // ============================================================
 // Adaptador Discord. Recibe un nodo de memoria, crea/reutiliza
 // una ronda abierta dirigida a Aletheia y registra una perspectiva.
+// El número de ronda es global dentro de la investigación.
 // ============================================================
 
 import {
@@ -54,6 +55,7 @@ async function prepararRondaParaNodo({ supabase, aletheiaId, nodoId }) {
   if (angelError) throw angelError;
   if (!angel) throw new Error('Investigador humano Ángel no encontrado.');
 
+  // Reutilizar una ronda abierta de Aletheia para el mismo nodo evita duplicados.
   const { data: rondasAbiertas, error: rondasError } = await supabase
     .from('rondas_investigacion')
     .select('id, investigacion_id, numero, tipo, estado, pregunta, iniciada_por, destinatario_id, ronda_padre_id, fase_id, contexto, conclusion, decision, created_at, closed_at, updated_at')
@@ -70,7 +72,18 @@ async function prepararRondaParaNodo({ supabase, aletheiaId, nodoId }) {
 
   if (rondaExistente) return rondaExistente;
 
-  const siguienteNumero = ((rondasAbiertas ?? [])[0]?.numero ?? 0) + 1;
+  // El número de ronda pertenece a la investigación, no al investigador.
+  // Por eso buscamos el máximo entre TODAS las rondas existentes.
+  const { data: todasLasRondas, error: todasLasRondasError } = await supabase
+    .from('rondas_investigacion')
+    .select('numero')
+    .eq('investigacion_id', investigacion.id)
+    .order('numero', { ascending: false })
+    .limit(1);
+
+  if (todasLasRondasError) throw todasLasRondasError;
+
+  const siguienteNumero = ((todasLasRondas ?? [])[0]?.numero ?? 0) + 1;
 
   const contexto = {
     nodo_id: nodo.id,
