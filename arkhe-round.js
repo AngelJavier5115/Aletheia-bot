@@ -173,6 +173,13 @@ export async function generarPerspectivaAletheia({
   return { ronda: convocatoria.ronda, intervencion: persistida.intervencion, resultado };
 }
 
+const ALETHEIA_ID = '122483a9-5012-46ce-a328-5bdb08b4de01';
+
+export async function ejecutarConvocatoria({ convocatoriaId, responder = true, openai, ai }) {
+  const resultado = await generarPerspectivaAletheia({ ai, aletheiaId: ALETHEIA_ID, convocatoriaId });
+  return resultado;
+}
+
 export function formatearPerspectivaDiscord({ ronda, intervencion, resultado }) {
   const incertidumbres = Array.isArray(resultado?.incertidumbres) ? resultado.incertidumbres : [];
   const preguntas = Array.isArray(resultado?.preguntas_abiertas) ? resultado.preguntas_abiertas : [];
