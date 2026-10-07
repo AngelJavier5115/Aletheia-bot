@@ -64,8 +64,36 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ ok: true, ...resultado }));
     } catch (error) {
       console.error('[Aletheia] Error ejecutando convocatoria:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
-      return res.end(JSON.stringify({ ok: false, error: error?.message || 'Error interno.' }));
+
+      try {
+        if (convocatoriaId) {
+          await fetch(process.env.ARKHE_CORE_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-arkhe-core-token': process.env.ARKHE_CORE_TOKEN
+            },
+            body: JSON.stringify({
+              action: 'fallar_convocatoria',
+              convocatoria_id: convocatoriaId,
+              investigador_id: ALETHEIA_ID
+            })
+          });
+        }
+      } catch (coreError) {
+        console.error('[Aletheia] No se pudo registrar el error de convocatoria en Arkhé Core:', coreError);
+      }
+
+      const status = Number(error?.status || 500);
+      res.writeHead(status >= 400 && status <= 599 ? status : 500, {
+        'Content-Type': 'application/json; charset=utf-8'
+      });
+      return res.end(JSON.stringify({
+        ok: false,
+        error: error?.message || 'Error interno.',
+        proveedor: 'Google Gemini',
+        transitorio: status === 503 || status === 429 || (status >= 500 && status <= 599)
+      }));
     }
   }
 
