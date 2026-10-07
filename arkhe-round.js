@@ -102,24 +102,57 @@ export async function generarPerspectivaAletheia({
 
   const prompt = construirPromptAletheia(convocatoria);
 
-  const response = await ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
-    contents: prompt,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          tipo: { type: 'STRING' },
-          posicion: { type: 'STRING' },
-          contenido: { type: 'STRING' },
-          incertidumbres: { type: 'ARRAY', items: { type: 'STRING' } },
-          preguntas_abiertas: { type: 'ARRAY', items: { type: 'STRING' } }
-        },
-        required: ['tipo', 'posicion', 'contenido', 'incertidumbres', 'preguntas_abiertas']
-      }
+  const modelo = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+  const config = {
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'OBJECT',
+      properties: {
+        tipo: { type: 'STRING' },
+        posicion: { type: 'STRING' },
+        contenido: { type: 'STRING' },
+        incertidumbres: { type: 'ARRAY', items: { type: 'STRING' } },
+        preguntas_abiertas: { type: 'ARRAY', items: { type: 'STRING' } }
+      },
+      required: ['tipo', 'posicion', 'contenido', 'incertidumbres', 'preguntas_abiertas']
     }
-  });
+  };
+
+  let response;
+  let ultimoError;
+
+  for (let intento = 1; intento <= 4; intento++) {
+    try {
+      response = await ai.models.generateContent({
+        model: modelo,
+        contents: prompt,
+        config
+      });
+      break;
+    } catch (error) {
+      ultimoError = error;
+      const status = Number(error?.status ?? error?.error?.code ?? 0);
+      const mensaje = String(error?.message ?? error ?? '');
+      const transitorio =
+        status === 429 ||
+        status === 408 ||
+        (status >= 500 && status <= 599) ||
+        mensaje.includes('503') ||
+        mensaje.includes('UNAVAILABLE');
+
+      if (!transitorio || intento === 4) {
+        throw error;
+      }
+
+      const esperaMs = 1000 * Math.pow(2, intento - 1);
+      console.warn('[Aletheia] Gemini transitorio, reintento ' + (intento + 1) + '/4 en ' + esperaMs + 'ms.');
+      await new Promise(resolve => setTimeout(resolve, esperaMs));
+    }
+  }
+
+  if (!response) {
+    throw ultimoError || new Error('Aletheia no recibió respuesta del motor Gemini.');
+  }
 
   const texto = textoSeguro(response?.text);
   if (!texto) throw new Error('Aletheia no produjo una perspectiva utilizable.');
