@@ -102,7 +102,15 @@ export async function generarPerspectivaAletheia({
 
   const prompt = construirPromptAletheia(convocatoria);
 
-  const modelo = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+  const modeloConfigurado = process.env.GEMINI_MODEL?.trim();
+  const modelos = [
+    modeloConfigurado,
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite'
+  ].filter(Boolean).filter((modelo, index, lista) => lista.indexOf(modelo) === index);
+
   const config = {
     responseMimeType: 'application/json',
     responseSchema: {
@@ -120,14 +128,18 @@ export async function generarPerspectivaAletheia({
 
   let response;
   let ultimoError;
+  let modeloUsado;
 
-  for (let intento = 1; intento <= 4; intento++) {
+  for (let indiceModelo = 0; indiceModelo < modelos.length; indiceModelo++) {
+    const modelo = modelos[indiceModelo];
+
     try {
       response = await ai.models.generateContent({
         model: modelo,
         contents: prompt,
         config
       });
+      modeloUsado = modelo;
       break;
     } catch (error) {
       ultimoError = error;
@@ -140,12 +152,15 @@ export async function generarPerspectivaAletheia({
         mensaje.includes('503') ||
         mensaje.includes('UNAVAILABLE');
 
-      if (!transitorio || intento === 4) {
+      if (!transitorio || indiceModelo === modelos.length - 1) {
         throw error;
       }
 
-      const esperaMs = 1000 * Math.pow(2, intento - 1);
-      console.warn('[Aletheia] Gemini transitorio, reintento ' + (intento + 1) + '/4 en ' + esperaMs + 'ms.');
+      const esperaMs = 1000 * Math.pow(2, indiceModelo);
+      console.warn(
+        '[Aletheia] Gemini transitorio con ' + modelo +
+        ', cambio al siguiente modelo tras ' + esperaMs + 'ms.'
+      );
       await new Promise(resolve => setTimeout(resolve, esperaMs));
     }
   }
@@ -192,7 +207,7 @@ export async function generarPerspectivaAletheia({
     responde_a_intervencion_id: convocatoria.convocatoria.foco_intervencion_id ?? null,
     nodo_id: convocatoria.ronda?.contexto?.nodo?.id ?? convocatoria.ronda?.contexto?.nodo_id ?? null,
     identidad_version: convocatoria.identidad.version,
-    modelo: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+    modelo: modeloUsado || modeloConfigurado || 'gemini-3.8-flash',
     proveedor: 'Google Gemini',
     metadata: {
       posicion: resultado.posicion,
