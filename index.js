@@ -67,6 +67,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
+  console.log('[Aletheia] Servidor HTTP activo en puerto ' + PORT);
+});
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
