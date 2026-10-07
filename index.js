@@ -37,6 +37,8 @@ function autorizadoCore(req) {
 }
 
 const server = http.createServer(async (req, res) => {
+  let convocatoriaId = null;
+
   if (req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end('Aletheia Bot is active!\n');
@@ -50,7 +52,7 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const body = await leerJsonRequest(req);
-      const convocatoriaId = body?.convocatoria_id;
+      convocatoriaId = body?.convocatoria_id;
       if (!convocatoriaId) throw new Error('convocatoria_id es obligatorio.');
       const resultado = await ejecutarConvocatoria({ convocatoriaId, ai });
       const contenidoPublicable =
@@ -65,8 +67,19 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       console.error('[Aletheia] Error ejecutando convocatoria:', error);
 
-      try {
-        if (convocatoriaId) {
+      const status = Number(error?.status || error?.error?.code || 500);
+      const mensaje = String(error?.message ?? error ?? '');
+      const transitorio =
+        status === 429 ||
+        status === 408 ||
+        (status >= 500 && status <= 599) ||
+        mensaje.includes('503') ||
+        mensaje.includes('UNAVAILABLE');
+
+      // Un fallo transitorio del proveedor no debe consumir la convocatoria.
+      // La dejamos en estado enviada para permitir una nueva ejecución independiente.
+      if (convocatoriaId && !transitorio) {
+        try {
           await fetch(process.env.ARKHE_CORE_URL, {
             method: 'POST',
             headers: {
@@ -79,12 +92,15 @@ const server = http.createServer(async (req, res) => {
               investigador_id: ALETHEIA_ID
             })
           });
+        } catch (coreError) {
+          console.error('[Aletheia] No se pudo registrar el error de convocatoria en Arkhé Core:', coreError);
         }
-      } catch (coreError) {
-        console.error('[Aletheia] No se pudo registrar el error de convocatoria en Arkhé Core:', coreError);
       }
 
-      const status = Number(error?.status || 500);
+      console.error(
+        '[Aletheia] Convocatoria ' + (convocatoriaId || 'sin ID') +
+        (transitorio ? ' queda disponible para reintento.' : ' quedó marcada como error.')
+      );
       res.writeHead(status >= 400 && status <= 599 ? status : 500, {
         'Content-Type': 'application/json; charset=utf-8'
       });
@@ -92,7 +108,7 @@ const server = http.createServer(async (req, res) => {
         ok: false,
         error: error?.message || 'Error interno.',
         proveedor: 'Google Gemini',
-        transitorio: status === 503 || status === 429 || (status >= 500 && status <= 599)
+        transitorio
       }));
     }
   }
