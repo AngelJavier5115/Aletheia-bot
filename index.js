@@ -6,6 +6,8 @@ import {
   SlashCommandBuilder
 } from 'discord.js';
 
+import { coreRequest } from './arkhe-core-client.js';
+
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI, Type } from '@google/genai';
 import http from 'http';
@@ -17,6 +19,8 @@ import {
 } from './arkhe-round-command.js';
 
 const PORT = process.env.PORT || 3000;
+const A2_PR_PREVIEW = process.env.IS_PULL_REQUEST === 'true';
+
 
 function leerJsonRequest(req) {
   return new Promise((resolve, reject) => {
@@ -603,4 +607,8 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+if (A2_PR_PREVIEW) {
+  console.log('[Aletheia] A2 Render preview mode: Discord login disabled.');
+} else {
+  client.login(process.env.DISCORD_TOKEN);
+}

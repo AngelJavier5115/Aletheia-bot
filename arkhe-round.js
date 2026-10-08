@@ -197,6 +197,18 @@ export async function generarPerspectivaAletheia({
   const contenido = textoSeguro(resultado.contenido);
   if (!contenido) throw new Error('La perspectiva de Aletheia está vacía.');
 
+  const modeloSolicitado = modeloUsado || modeloConfigurado || 'gemini-3.8-flash';
+  const modeloObservado = textoSeguro(response?.modelVersion);
+  const idRespuestaProveedor = textoSeguro(response?.responseId);
+
+  if (!modeloObservado) {
+    throw new Error('Aletheia no recibió modelVersion del proveedor Gemini.');
+  }
+
+  if (!idRespuestaProveedor) {
+    throw new Error('Aletheia no recibió responseId del proveedor Gemini.');
+  }
+
   const persistida = await coreRequest({
     action: 'completar_convocatoria',
     convocatoria_id: convocatoriaId,
@@ -207,14 +219,18 @@ export async function generarPerspectivaAletheia({
     responde_a_intervencion_id: convocatoria.convocatoria.foco_intervencion_id ?? null,
     nodo_id: convocatoria.ronda?.contexto?.nodo?.id ?? convocatoria.ronda?.contexto?.nodo_id ?? null,
     identidad_version: convocatoria.identidad.version,
-    modelo: modeloUsado || modeloConfigurado || 'gemini-3.8-flash',
+    modelo: modeloObservado,
     proveedor: 'Google Gemini',
     metadata: {
       posicion: resultado.posicion,
       incertidumbres: Array.isArray(resultado.incertidumbres) ? resultado.incertidumbres : [],
       preguntas_abiertas: Array.isArray(resultado.preguntas_abiertas) ? resultado.preguntas_abiertas : [],
       cuerpo: 'discord',
-      adaptador: 'aletheia-researcher-v2'
+      adaptador: 'aletheia-researcher-v2',
+      modelo_solicitado: modeloSolicitado,
+      modelo_observado: modeloObservado,
+      id_respuesta_proveedor: idRespuestaProveedor,
+      nivel_procedencia: 'provider-response-attested'
     }
   });
 
