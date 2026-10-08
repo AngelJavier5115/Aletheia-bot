@@ -19,7 +19,8 @@ import {
 } from './arkhe-round-command.js';
 
 const PORT = process.env.PORT || 3000;
-const A2_PREVIEW_ENABLED = process.env.IS_PULL_REQUEST === 'true' && process.env.ARKHE_A2_PREVIEW === '1';
+const A2_PR_PREVIEW = process.env.IS_PULL_REQUEST === 'true';
+const A2_SMOKE_ENABLED = A2_PR_PREVIEW && process.env.ARKHE_A2_PREVIEW === '1';
 const A2_EXPECTED_INVESTIGATOR_ID = '122483a9-5012-46ce-a328-5bdb08b4de01';
 
 
@@ -45,7 +46,7 @@ const server = http.createServer(async (req, res) => {
   let convocatoriaId = null;
 
   if (req.method === 'GET' && req.url === '/a2/smoke') {
-    if (!A2_PREVIEW_ENABLED) {
+    if (!A2_SMOKE_ENABLED) {
       res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
       return res.end(JSON.stringify({ ok: false }));
     }
@@ -643,7 +644,7 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
   }
 });
 
-if (A2_PREVIEW_ENABLED) {
+if (A2_PR_PREVIEW) {
   console.log('[Aletheia] A2 Render preview mode: Discord login disabled.');
 } else {
   client.login(process.env.DISCORD_TOKEN);
