@@ -4,6 +4,7 @@ import {
   REST,
   Routes,
   SlashCommandBuilder
+import { coreRequest } from './arkhe-core-client.js';
 } from 'discord.js';
 
 import { createClient } from '@supabase/supabase-js';
@@ -17,6 +18,9 @@ import {
 } from './arkhe-round-command.js';
 
 const PORT = process.env.PORT || 3000;
+const A2_PREVIEW_ENABLED = process.env.IS_PULL_REQUEST === 'true' && process.env.ARKHE_A2_PREVIEW === '1';
+const A2_EXPECTED_INVESTIGATOR_ID = '122483a9-5012-46ce-a328-5bdb08b4de01';
+
 
 function leerJsonRequest(req) {
   return new Promise((resolve, reject) => {
@@ -38,6 +42,41 @@ function autorizadoCore(req) {
 
 const server = http.createServer(async (req, res) => {
   let convocatoriaId = null;
+
+  if (req.method === 'GET' && req.url === '/a2/smoke') {
+    if (!A2_PREVIEW_ENABLED) {
+      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ ok: false }));
+    }
+
+    const convocatoriaId = process.env.ARKHE_A2_CONVOCATORIA_ID;
+    if (!convocatoriaId) {
+      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ ok: false, error: 'ARKHE_A2_CONVOCATORIA_ID no está configurado.' }));
+    }
+
+    try {
+      const result = await coreRequest({
+        action: 'obtener_convocatoria',
+        convocatoria_id: convocatoriaId
+      });
+
+      if (result?.convocatoria?.investigador_id !== A2_EXPECTED_INVESTIGATOR_ID) {
+        throw new Error('La convocatoria no coincide con la identidad esperada del servicio.');
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({
+        ok: true,
+        service_id: process.env.ARKHE_SERVICE_ID,
+        investigator_id: result.convocatoria.investigador_id,
+        convocatoria_id: convocatoriaId
+      }));
+    } catch (error) {
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({ ok: false, error: error?.message ?? 'A2 smoke failed.' }));
+    }
+  }
 
   if (req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -603,4 +642,8 @@ Posición provisional: cuál es la posición actual de Aletheia sobre el conjunt
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+if (A2_PREVIEW_ENABLED) {
+  console.log('[Aletheia] A2 Render preview mode: Discord login disabled.');
+} else {
+  client.login(process.env.DISCORD_TOKEN);
+}
