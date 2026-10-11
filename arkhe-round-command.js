@@ -1,52 +1,27 @@
 // ============================================================
 // ARKHÉ — CUERPO DISCORD DE ALETHEIA
 // ============================================================
-// Discord transporta la orden humana. Arkhé Core gobierna la ronda.
-// Aletheia conserva su propia identidad y razonamiento.
+// La investigación sólo comienza mediante un despacho firmado de
+// Arkhé Core después de autorización humana WebAuthn. Una UUID no
+// concede permiso para ejecutar una convocatoria.
 // ============================================================
 
-import {
-  generarPerspectivaAletheia,
-  formatearPerspectivaDiscord
-} from './arkhe-round.js';
-
 export const ALETHEIA_ROUND_COMMAND_NAME = 'aletheia-convocatoria';
-
-const ALETHEIA_ID = '122483a9-5012-46ce-a328-5bdb08b4de01';
 
 export function crearComandoAletheiaRonda(SlashCommandBuilder) {
   return new SlashCommandBuilder()
     .setName(ALETHEIA_ROUND_COMMAND_NAME)
-    .setDescription('Aletheia: procesa una convocatoria existente autorizada por Arkhé Core')
+    .setDescription('Ejecución directa bloqueada: las convocatorias deben llegar mediante despacho firmado de Arkhé Core.')
     .addStringOption(option => option
       .setName('convocatoria_id')
-      .setDescription('UUID de una convocatoria pendiente asignada a Aletheia')
+      .setDescription('UUID informativo de la convocatoria (no la ejecuta)')
       .setRequired(true));
 }
 
-export async function ejecutarAletheiaRonda({
-  interaction,
-  ai,
-  responderLargo
-}) {
-  const convocatoriaId = interaction.options.getString('convocatoria_id', true);
-
-  try {
-    const resultado = await generarPerspectivaAletheia({
-      ai,
-      aletheiaId: '122483a9-5012-46ce-a328-5bdb08b4de01',
-      convocatoriaId
-    });
-
-    return await responderLargo(
-      interaction,
-      formatearPerspectivaDiscord(resultado)
-    );
-  } catch (error) {
-    console.error('[Aletheia] Error en convocatoria:', error);
-    return await interaction.editReply(
-      '[Aletheia] ❌ Arkhé Core no pudo completar la convocatoria ' + convocatoriaId + '.\\n\\n' +
-      'Motivo: ' + (error?.message || 'error desconocido')
-    );
-  }
+export async function ejecutarAletheiaRonda({ interaction }) {
+  return await interaction.editReply(
+    '⛔ **Aletheia — ejecución directa deshabilitada.**\\n\\n' +
+    'Una convocatoria sólo puede procesarse después de recibir un despacho firmado, de un solo uso, emitido por Arkhé Core con autorización humana reciente. ' +
+    'Este comando no ejecutó el motor ni contactó al Core.'
+  );
 }
