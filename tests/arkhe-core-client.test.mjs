@@ -120,3 +120,12 @@ test('aletheia signed client rejects human-governance actions before network acc
     globalThis.fetch = previousFetch;
   }
 });
+
+
+test('Aletheia Discord researcher command consumes an existing invocation, not governance', async () => {
+  const { readFileSync } = await import('node:fs');
+  const command = readFileSync(new URL('../arkhe-round-command.js', import.meta.url), 'utf8');
+
+  assert.match(command, /convocatoria_id/);
+  assert.doesNotMatch(command, /coreRequest|iniciar_ronda|convocar_investigadores|actor_id/);
+});
