@@ -85,15 +85,18 @@ Devuelve únicamente JSON válido:
 export async function generarPerspectivaAletheia({
   ai,
   aletheiaId,
-  convocatoriaId
+  convocatoriaId,
+  dispatchId
 }) {
   if (!ai) throw new Error('Motor de Aletheia no configurado.');
   if (!aletheiaId) throw new Error('aletheiaId es obligatorio.');
   if (!convocatoriaId) throw new Error('convocatoriaId es obligatorio.');
+  if (!dispatchId) throw new Error('La ejecución requiere un dispatch_id firmado por Arkhé Core.');
 
   const convocatoria = await coreRequest({
     action: 'obtener_convocatoria',
-    convocatoria_id: convocatoriaId
+    convocatoria_id: convocatoriaId,
+    dispatch_id: dispatchId
   });
 
   if (convocatoria.convocatoria.investigador_id !== aletheiaId) {
@@ -200,6 +203,7 @@ export async function generarPerspectivaAletheia({
   const persistida = await coreRequest({
     action: 'completar_convocatoria',
     convocatoria_id: convocatoriaId,
+    dispatch_id: dispatchId,
     ronda_id: convocatoria.ronda.id,
     investigador_id: aletheiaId,
     tipo: 'perspectiva',
@@ -223,8 +227,8 @@ export async function generarPerspectivaAletheia({
 
 const ALETHEIA_ID = '122483a9-5012-46ce-a328-5bdb08b4de01';
 
-export async function ejecutarConvocatoria({ convocatoriaId, responder = true, openai, ai }) {
-  const resultado = await generarPerspectivaAletheia({ ai, aletheiaId: ALETHEIA_ID, convocatoriaId });
+export async function ejecutarConvocatoria({ convocatoriaId, dispatchId, responder = true, openai, ai }) {
+  const resultado = await generarPerspectivaAletheia({ ai, aletheiaId: ALETHEIA_ID, convocatoriaId, dispatchId });
   return resultado;
 }
 
