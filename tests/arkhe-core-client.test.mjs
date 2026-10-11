@@ -127,7 +127,8 @@ test('Aletheia Discord researcher command consumes an existing invocation, not g
   const command = readFileSync(new URL('../arkhe-round-command.js', import.meta.url), 'utf8');
 
   assert.match(command, /convocatoria_id/);
-  assert.doesNotMatch(command, /coreRequest|iniciar_ronda|convocar_investigadores|actor_id/);
+  assert.match(command, /ejecución directa deshabilitada/);
+  assert.doesNotMatch(command, /generarPerspectivaAletheia|coreRequest|iniciar_ronda|convocar_investigadores|actor_id/);
 });
 
 
